@@ -6,7 +6,7 @@ ICONDIR ?= $(PREFIX)/share/icons/hicolor/scalable/apps
 DESKTOP_OUT := $(APPDIR)/gtrack.desktop
 TAURI_BIN   := src-tauri/target/release/gtrack
 
-.PHONY: help deps dev build install uninstall check clean icons
+.PHONY: help deps dev build install uninstall check test clean icons
 
 help:
 	@echo "Targets:"
@@ -17,6 +17,7 @@ help:
 	@echo "                  (default PREFIX=\$$HOME/.local; sudo PREFIX=/usr/local for system-wide)"
 	@echo "  make uninstall  remove what 'install' put down"
 	@echo "  make check      typecheck + cargo check (no build)"
+	@echo "  make test       unit tests"
 	@echo "  make clean      remove dist/ and src-tauri/target/"
 
 deps:
@@ -46,6 +47,9 @@ $(TAURI_BIN): $(shell find src src-tauri/src -type f) package.json src-tauri/Car
 check:
 	npm run build
 	cd src-tauri && cargo check
+
+test:
+	cd src-tauri && cargo test
 
 install: $(TAURI_BIN)
 	install -d $(BINDIR) $(APPDIR) $(ICONDIR)
