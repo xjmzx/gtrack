@@ -61,6 +61,14 @@ hesitate to run, which defeats the point of it.
   another, so remote classification checks the *shape* of a URL, never a
   specific alias name.
 
+## Planned
+
+[`BACKLOG.md`](BACKLOG.md) holds the open design question: a CI-status or
+release-artifacts column, either of which would be gtrack's **first network
+call beyond git**. Read it before adding one — the constraints there (explicit
+not implicit, staleness stated, no tokens in the process) are the reasons the
+tool is worth using, not preferences.
+
 ## Not here
 
 Machine-local paths, server addresses, credentials and per-box ops belong in a
