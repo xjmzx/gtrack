@@ -74,8 +74,27 @@ pub struct RepoStatus {
     pub flags: Vec<String>,
 }
 
+/// A `git -C <dir>` invocation, ready for its arguments.
+///
+/// On Windows each of these would otherwise pop a console window in front of
+/// the app for the few milliseconds it lives. A scan is roughly ten calls per
+/// repository, so even a modest machine flashes a few hundred of them over the
+/// window and takes focus with every one — the app appears to redraw itself in
+/// a loop for the length of the scan. `CREATE_NO_WINDOW` is the whole fix.
+fn git_cmd(dir: &Path) -> Command {
+    let mut cmd = Command::new("git");
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    cmd.arg("-C").arg(dir);
+    cmd
+}
+
 fn git(dir: &Path, args: &[&str]) -> Option<String> {
-    let out = Command::new("git").arg("-C").arg(dir).args(args).output().ok()?;
+    let out = git_cmd(dir).args(args).output().ok()?;
     if !out.status.success() {
         return None;
     }
@@ -200,7 +219,7 @@ fn inspect(path: &Path, root_label: &str, cfg: &Config, fetch: bool) -> RepoStat
     let mut fetched = false;
     let mut fetch_error = None;
     if fetch && upstream.is_some() {
-        match Command::new("git").arg("-C").arg(path).args(["fetch", "--quiet", &remote_name]).output() {
+        match git_cmd(path).args(["fetch", "--quiet", &remote_name]).output() {
             Ok(o) if o.status.success() => fetched = true,
             Ok(o) => {
                 let msg = String::from_utf8_lossy(&o.stderr).trim().to_string();

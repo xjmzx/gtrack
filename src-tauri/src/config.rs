@@ -138,12 +138,27 @@ impl Config {
 /// behaves the same as one written by the app.
 pub fn expand(p: &str) -> PathBuf {
     match p.strip_prefix("~/") {
-        Some(rest) => match std::env::var("HOME") {
-            Ok(home) => Path::new(&home).join(rest),
-            Err(_) => PathBuf::from(p),
+        Some(rest) => match home() {
+            Some(home) => home.join(rest),
+            None => PathBuf::from(p),
         },
         None => PathBuf::from(p),
     }
+}
+
+/// The directory `~` stands for.
+///
+/// `HOME` is the Unix answer and leads there. Windows does not set it for a
+/// process launched from Explorer, so a default config's roots would expand to
+/// nothing and the window would come up empty; and where a POSIX shell like Git
+/// Bash does set it, it holds a `/c/...` path that no Windows API can open.
+/// `USERPROFILE` is the one that is both present and openable, so it leads there.
+fn home() -> Option<PathBuf> {
+    const KEYS: &[&str] = if cfg!(windows) { &["USERPROFILE", "HOME"] } else { &["HOME"] };
+    KEYS.iter()
+        .filter_map(std::env::var_os)
+        .find(|v| !v.is_empty())
+        .map(PathBuf::from)
 }
 
 /// Debug builds keep their own config, per the suite convention, so a dev run
@@ -192,8 +207,14 @@ mod tests {
 
     #[test]
     fn tilde_expands_from_home() {
-        std::env::set_var("HOME", "/home/test");
-        assert_eq!(expand("~/code"), PathBuf::from("/home/test/code"));
+        // Which variable carries it is the part that differs by platform.
+        let (key, dir) = if cfg!(windows) {
+            ("USERPROFILE", r"C:\home\test")
+        } else {
+            ("HOME", "/home/test")
+        };
+        std::env::set_var(key, dir);
+        assert_eq!(expand("~/code"), PathBuf::from(dir).join("code"));
         assert_eq!(expand("/abs/path"), PathBuf::from("/abs/path"));
     }
 
