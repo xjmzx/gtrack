@@ -12,6 +12,8 @@ export interface Versions {
   package: string | null;
   cargo: string | null;
   tauri: string | null;
+  /** package-lock.json. `npm version` keeps it in step; a hand-edit does not. */
+  lock: string | null;
   /** False when two files that both declare a version disagree. */
   agree: boolean;
 }

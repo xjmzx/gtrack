@@ -6,15 +6,19 @@ import { severity, type RepoStatus } from "../lib/tauri";
  *  together; showing one of three hides exactly the bug worth catching. */
 function Version({ r }: { r: RepoStatus }) {
   const { versions: v } = r;
-  const all = [v.package, v.cargo, v.tauri].filter(Boolean) as string[];
+  const all = [v.package, v.cargo, v.tauri, v.lock].filter(Boolean) as string[];
   if (all.length === 0) return <span className="text-muted/30">—</span>;
   if (v.agree) return <span className="text-fg">{all[0]}</span>;
+  // Four sources now, so show the distinct values rather than one per file —
+  // "0.1.1 / 0.1.0" is the finding; repeating the agreeing value three times
+  // buries it.
+  const distinct = [...new Set(all)];
   return (
     <span
       className="text-alert font-semibold"
-      title={`package.json ${v.package ?? "—"} · Cargo.toml ${v.cargo ?? "—"} · tauri.conf.json ${v.tauri ?? "—"}`}
+      title={`package.json ${v.package ?? "—"} · Cargo.toml ${v.cargo ?? "—"} · tauri.conf.json ${v.tauri ?? "—"} · package-lock.json ${v.lock ?? "—"}`}
     >
-      {all.join(" / ")}
+      {distinct.join(" / ")}
     </span>
   );
 }

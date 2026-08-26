@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- **`package-lock.json` joins the version check.** It is a fourth file in the
+  same invariant and it drifts more quietly than the others, because `npm
+  version` maintains it and a hand-edit does not — v0.1.1 shipped that way, and
+  six repositories across the suite turned out to be carrying the same drift,
+  one of them four releases behind. The lockfile states its version **twice**,
+  at the top level and under `packages[""]`, so both are read: a lockfile
+  disagreeing with itself is caught by the same comparison as one disagreeing
+  with `package.json`, with no special case. A mismatch now shows the distinct
+  values rather than one entry per file, so the two that differ are the two you
+  see.
+
 ## v0.1.1
 
 Verified on all three platforms: built and installed on macOS, Windows and

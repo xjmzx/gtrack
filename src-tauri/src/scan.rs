@@ -36,8 +36,12 @@ pub struct Versions {
     pub package: Option<String>,
     pub cargo: Option<String>,
     pub tauri: Option<String>,
+    /// `package-lock.json`. Kept in step automatically by `npm version`, and
+    /// not at all by a hand-edit — which is how v0.1.1 shipped with the other
+    /// three bumped and this one behind.
+    pub lock: Option<String>,
     /// False when two files that both declare a version disagree. A release
-    /// needs all three bumped together; missing files are not a disagreement.
+    /// needs all of them bumped together; missing files are not a disagreement.
     pub agree: bool,
 }
 
@@ -143,15 +147,45 @@ fn cargo_version(path: &Path) -> Option<String> {
     None
 }
 
+/// Every version a lockfile states — it carries one at the top level and
+/// another under `packages[""]`, and a hand-edit can move one without the
+/// other. Both are returned so an internal disagreement is caught by the same
+/// comparison as a disagreement with the other files, rather than needing its
+/// own special case.
+fn lock_versions(path: &Path) -> Vec<String> {
+    let Ok(raw) = std::fs::read_to_string(path) else { return Vec::new() };
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(&raw) else { return Vec::new() };
+
+    let mut out = Vec::new();
+    for found in [
+        v.get("version").and_then(|x| x.as_str()),
+        v.get("packages")
+            .and_then(|p| p.get(""))
+            .and_then(|r| r.get("version"))
+            .and_then(|x| x.as_str()),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        if !out.iter().any(|e: &String| e == found) {
+            out.push(found.to_string());
+        }
+    }
+    out
+}
+
 fn read_versions(dir: &Path) -> Versions {
     let package = json_version(&dir.join("package.json"));
     let cargo = cargo_version(&dir.join("src-tauri/Cargo.toml"))
         .or_else(|| cargo_version(&dir.join("Cargo.toml")));
     let tauri = json_version(&dir.join("src-tauri/tauri.conf.json"));
+    let locks = lock_versions(&dir.join("package-lock.json"));
 
-    let present: Vec<&String> = [&package, &cargo, &tauri].into_iter().flatten().collect();
+    let mut present: Vec<&String> = [&package, &cargo, &tauri].into_iter().flatten().collect();
+    present.extend(locks.iter());
     let agree = present.windows(2).all(|w| w[0] == w[1]);
-    Versions { package, cargo, tauri, agree }
+
+    Versions { package, cargo, tauri, lock: locks.first().cloned(), agree }
 }
 
 /// Stale locks under `.git`. Only zero-byte ones are reported: a lock with
@@ -386,9 +420,9 @@ mod tests {
 
     #[test]
     fn versions_agree_when_files_are_missing_but_not_when_they_differ() {
-        let v = Versions { package: Some("1.0".into()), cargo: None, tauri: Some("1.0".into()), agree: true };
+        let v = Versions { package: Some("1.0".into()), cargo: None, tauri: Some("1.0".into()), lock: None, agree: true };
         assert!(v.agree);
-        let present: Vec<&String> = [&v.package, &v.cargo, &v.tauri].into_iter().flatten().collect();
+        let present: Vec<&String> = [&v.package, &v.cargo, &v.tauri, &v.lock].into_iter().flatten().collect();
         assert!(present.windows(2).all(|w| w[0] == w[1]));
 
         let bad = [Some("1.0".to_string()), Some("1.1".to_string())];
@@ -415,5 +449,48 @@ mod tests {
             assert!(j.get(key).is_some(), "missing camelCase key `{key}` — the webview would read undefined");
         }
         assert!(j.get("latest_tag").is_none(), "snake_case key leaked through");
+    }
+
+    #[test]
+    fn a_lockfile_states_its_version_twice_and_both_count() {
+        let dir = std::env::temp_dir().join("gtrack-test-lock");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("package.json"), r#"{"version":"0.1.1"}"#).unwrap();
+
+        // In step: no disagreement.
+        std::fs::write(
+            dir.join("package-lock.json"),
+            r#"{"version":"0.1.1","packages":{"":{"version":"0.1.1"}}}"#,
+        ).unwrap();
+        let v = read_versions(&dir);
+        assert_eq!(v.lock.as_deref(), Some("0.1.1"));
+        assert!(v.agree);
+
+        // Behind the others — the v0.1.1 release did exactly this.
+        std::fs::write(
+            dir.join("package-lock.json"),
+            r#"{"version":"0.1.0","packages":{"":{"version":"0.1.0"}}}"#,
+        ).unwrap();
+        assert!(!read_versions(&dir).agree, "a lockfile behind package.json must not read as agreement");
+
+        // Disagreeing with ITSELF: caught by the same comparison, no special case.
+        std::fs::write(
+            dir.join("package-lock.json"),
+            r#"{"version":"0.1.1","packages":{"":{"version":"0.1.0"}}}"#,
+        ).unwrap();
+        assert!(!read_versions(&dir).agree, "a lockfile disagreeing with itself must not read as agreement");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_repo_with_no_lockfile_is_not_a_disagreement() {
+        let dir = std::env::temp_dir().join("gtrack-test-nolock");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("package.json"), r#"{"version":"1.0.0"}"#).unwrap();
+        let v = read_versions(&dir);
+        assert_eq!(v.lock, None);
+        assert!(v.agree, "absent files are not disagreement");
+        std::fs::remove_dir_all(&dir).ok();
     }
 }
