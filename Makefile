@@ -19,6 +19,7 @@ help:
 	@echo "  make check      typecheck + cargo check (no build)"
 	@echo "  make test       unit tests"
 	@echo "  make clean      remove dist/ and src-tauri/target/"
+	@echo "  make version V=0.1.2   bump the version in all five files at once"
 
 deps:
 	npm install
@@ -80,3 +81,22 @@ uninstall:
 
 clean:
 	rm -rf dist src-tauri/target
+
+# Bump every file that carries the version, in one step.
+#
+# There are five, and nothing in a build complains when they disagree: two in
+# package-lock.json, one each in package.json, Cargo.toml, tauri.conf.json,
+# plus the entry Cargo.lock keeps for this crate. gtrack's own v0.1.1 shipped
+# with the npm lockfile a release behind, and six repositories in this suite
+# had drifted the same way — one of them four releases back. Hand-editing a
+# subset is the whole failure mode, so this edits all of them or none.
+#
+#   make version V=0.1.2
+version:
+	@test -n "$(V)" || { echo "usage: make version V=0.1.2" >&2; exit 2; }
+	@npm version --no-git-tag-version --allow-same-version "$(V)" >/dev/null
+	@sed -i.bak -E 's/^version = ".*"/version = "$(V)"/' src-tauri/Cargo.toml && rm -f src-tauri/Cargo.toml.bak
+	@python3 -c 'import json,sys; p="src-tauri/tauri.conf.json"; d=json.load(open(p)); d["version"]=sys.argv[1]; open(p,"w").write(json.dumps(d,indent=2)+"\n")' "$(V)"
+	@cd src-tauri && cargo check --quiet 2>/dev/null   # rewrites Cargo.lock's entry for this crate
+	@echo "version set to $(V) in all five places:"
+	@git diff --stat -- package.json package-lock.json src-tauri/Cargo.toml src-tauri/Cargo.lock src-tauri/tauri.conf.json

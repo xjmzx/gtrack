@@ -1,6 +1,14 @@
 # Changelog
 
-## Unreleased
+## v0.1.2
+
+- **`make version V=x.y.z` bumps all five places at once.** Two in
+  `package-lock.json`, one each in `package.json`, `Cargo.toml` and
+  `tauri.conf.json`, plus the entry `Cargo.lock` keeps for this crate. Editing
+  a subset by hand is the entire failure mode the version check exists to
+  catch, so the fix is to stop making it possible rather than only to detect
+  it. Also gives `package.json` and `tauri.conf.json` the trailing newline they
+  never had.
 
 - **`package-lock.json` joins the version check.** It is a fourth file in the
   same invariant and it drifts more quietly than the others, because `npm
