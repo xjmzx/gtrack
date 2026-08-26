@@ -42,6 +42,11 @@ pub struct Versions {
 }
 
 #[derive(Serialize, Clone, Debug)]
+// Without this the struct serialises as snake_case while the TypeScript reads
+// camelCase, and the mismatched fields arrive as `undefined` — the row still
+// renders, just silently missing its tag, its remote kind and its fetch error.
+// Caught only by noticing every repo claimed to be untagged.
+#[serde(rename_all = "camelCase")]
 pub struct RepoStatus {
     pub name: String,
     pub path: String,
@@ -345,5 +350,26 @@ mod tests {
         let bad = [Some("1.0".to_string()), Some("1.1".to_string())];
         let present: Vec<&String> = bad.iter().flatten().collect();
         assert!(!present.windows(2).all(|w| w[0] == w[1]));
+    }
+
+    /// The webview reads camelCase. A missing rename attribute does not fail
+    /// to compile, does not fail to serialise, and does not error at runtime —
+    /// it just delivers `undefined` for every multi-word field. Assert the
+    /// wire names directly.
+    #[test]
+    fn repo_status_serialises_the_names_the_webview_reads() {
+        let r = RepoStatus {
+            name: "x".into(), path: "/x".into(), group: "g".into(),
+            branch: None, upstream: None, remote: None, remote_kind: RemoteKind::None,
+            ahead: 0, behind: 0, dirty: 0, fetched: false, fetch_error: None,
+            versions: Versions::default(),
+            latest_tag: Some("v1".into()), tag_date: None, commits_since_tag: None,
+            locks: vec![], flags: vec![],
+        };
+        let j = serde_json::to_value(&r).unwrap();
+        for key in ["latestTag", "tagDate", "commitsSinceTag", "remoteKind", "fetchError"] {
+            assert!(j.get(key).is_some(), "missing camelCase key `{key}` — the webview would read undefined");
+        }
+        assert!(j.get("latest_tag").is_none(), "snake_case key leaked through");
     }
 }

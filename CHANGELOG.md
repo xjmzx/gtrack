@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- **Fixed: every repo reported itself untagged.** `RepoStatus` serialised as
+  snake_case while the webview read camelCase, so `latestTag`, `tagDate`,
+  `commitsSinceTag`, `remoteKind` and `fetchError` all arrived as `undefined`.
+  The rows rendered perfectly well and quietly dropped five fields — and two of
+  them feed `severity()`, so https-remote and unreachable repositories were
+  being coloured as if they were fine. A test now asserts the wire names
+  directly, because nothing else about this fails: it compiles, it serialises,
+  it does not error.
+- **The status reads as a block of colour.** A 2px border at the window edge
+  was easy to miss; rows now carry a solid marker and a whole-row tint when
+  they need attention, with zebra striping on the rest.
+- **Larger type and columns that sit together.** Repo names and semver strings
+  both occupy a narrow, predictable width range, so the columns are fixed
+  rather than fractional — letting them stretch only pushed the eye across
+  empty space. The list stops widening at 64rem for the same reason.
+
 - **Collapsible groups, collapsed by default.** With fifty-odd checkouts an
   expanded list is a wall, and the tool is used one project at a time. Click a
   group header to open it; the state persists per machine.

@@ -94,8 +94,8 @@ export default function App() {
   return (
     <div className="min-h-full flex flex-col">
       <header className="flex items-center gap-2 px-2.5 py-1.5 border-b border-surface/60">
-        <GitBranch size={15} className="text-accent shrink-0" />
-        <span className="text-sm font-bold tracking-tight select-none">
+        <GitBranch size={16} className="text-accent shrink-0" />
+        <span className="text-base font-bold tracking-tight select-none">
           <span className="text-accent">g</span>
           <span className="text-mauve">track</span>
         </span>
@@ -112,14 +112,14 @@ export default function App() {
           <button
             onClick={toggleAll}
             title={allCollapsed ? "Expand every group" : "Collapse every group"}
-            className="px-1.5 py-1 rounded text-[11px] font-mono text-muted hover:text-fg hover:bg-fg/5 transition-colors"
+            className="px-2 py-1 rounded text-xs font-mono text-muted hover:text-fg hover:bg-fg/5 transition-colors"
           >
             {allCollapsed ? "expand" : "collapse"}
           </button>
           <button
             onClick={() => setOnlyProblems((v) => !v)}
             className={cn(
-              "px-1.5 py-1 rounded text-[11px] font-mono transition-colors",
+              "px-2 py-1 rounded text-xs font-mono transition-colors",
               onlyProblems ? "bg-warn/15 text-warn" : "text-muted hover:text-fg hover:bg-fg/5",
             )}
             title="Show only repos with something worth looking at"
@@ -130,7 +130,7 @@ export default function App() {
             onClick={() => void run(false)}
             disabled={busy}
             title="Re-read local state. No network."
-            className="px-1.5 py-1 rounded text-[11px] font-mono text-muted hover:text-fg hover:bg-fg/5 disabled:opacity-40 transition-colors"
+            className="px-2 py-1 rounded text-xs font-mono text-muted hover:text-fg hover:bg-fg/5 disabled:opacity-40 transition-colors"
           >
             rescan
           </button>
@@ -138,7 +138,7 @@ export default function App() {
             onClick={() => void run(true)}
             disabled={busy}
             title="Fetch every tracked remote, then rescan"
-            className="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium text-bg bg-accent hover:bg-accent/90 disabled:opacity-40 transition-colors"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium text-bg bg-accent hover:bg-accent/90 disabled:opacity-40 transition-colors"
           >
             <RefreshCw size={11} className={busy ? "animate-spin" : ""} />
             fetch
@@ -151,7 +151,7 @@ export default function App() {
           and the most misleading thing this tool could do. */}
       <div
         className={cn(
-          "px-2.5 py-0.5 text-[10px] font-mono flex items-center gap-1.5 leading-tight",
+          "px-2.5 py-1 text-[11px] font-mono flex items-center gap-1.5 leading-snug",
           wasFetched ? "bg-ok/10 text-ok" : "bg-warn/10 text-warn",
         )}
       >
@@ -164,6 +164,7 @@ export default function App() {
       {error && <div className="px-2.5 py-1 bg-alert/10 text-alert text-[11px] break-all">{error}</div>}
 
       <main className="flex-1 overflow-y-auto">
+        <div className="max-w-[64rem]">
         {grouped.map(([label, rows]) => {
           // A filter is itself a request to see what matched, so it overrides
           // the collapse state rather than hiding the results behind it.
@@ -173,22 +174,22 @@ export default function App() {
             <section key={label}>
               <button
                 onClick={() => toggle(label)}
-                className="w-full sticky top-0 z-10 bg-panel/95 backdrop-blur px-1.5 py-1 flex items-center gap-1.5 border-y border-surface/60 hover:bg-surface/60 transition-colors text-left"
+                className="w-full sticky top-0 z-10 bg-panel/95 backdrop-blur px-2 py-1.5 flex items-center gap-2 border-y border-surface/60 hover:bg-surface/60 transition-colors text-left"
               >
                 {isOpen ? (
-                  <ChevronDown size={12} className="text-muted shrink-0" />
+                  <ChevronDown size={14} className="text-muted shrink-0" />
                 ) : (
-                  <ChevronRight size={12} className="text-muted shrink-0" />
+                  <ChevronRight size={14} className="text-muted shrink-0" />
                 )}
-                <span className="text-[11px] uppercase tracking-wide text-muted">{label}</span>
+                <span className="text-xs uppercase tracking-wider text-fg/80 font-medium">{label}</span>
                 {/* Collapsing hides detail, never signal: a closed group still
                     says how much inside it needs looking at. */}
-                <span className="text-[10px] font-mono text-muted/50">{rows.length}</span>
+                <span className="text-[11px] font-mono text-muted/60 tabular-nums">{rows.length}</span>
                 {bad > 0 && (
-                  <span className="text-[10px] font-mono px-1 rounded bg-alert/15 text-alert">{bad}</span>
+                  <span className="text-[11px] font-mono px-1.5 rounded bg-alert/25 text-alert tabular-nums font-semibold">{bad}</span>
                 )}
               </button>
-              {isOpen && rows.map((r) => <RepoRow key={r.path} r={r} />)}
+              {isOpen && rows.map((r, i) => <RepoRow key={r.path} r={r} zebra={i % 2 === 1} />)}
             </section>
           );
         })}
@@ -197,9 +198,10 @@ export default function App() {
             {onlyProblems ? "Nothing to look at." : "No checkouts found — roots live in gtrack.json."}
           </p>
         )}
+        </div>
       </main>
 
-      <footer className="px-2.5 py-1 border-t border-surface/60 text-[10px] text-muted flex items-center gap-3 leading-tight">
+      <footer className="px-2.5 py-1 border-t border-surface/60 text-[11px] text-muted flex items-center gap-3 leading-snug">
         <span>{repos.length} repos</span>
         <span className="hidden sm:inline text-muted/60">read-only</span>
         <span className="ml-auto opacity-60">ndisc suite</span>
