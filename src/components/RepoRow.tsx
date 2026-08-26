@@ -45,17 +45,22 @@ export function RepoRow({ r, zebra }: { r: RepoStatus; zebra: boolean }) {
   return (
     <div
       className={cn(
-        // Fixed columns rather than fractions: repo names and semver strings
-        // both sit in a narrow, predictable width range, so letting them
-        // stretch only pushes the eye across empty space.
-        "grid grid-cols-[6px_minmax(7rem,13rem)_minmax(0,1fr)] md:grid-cols-[6px_minmax(9rem,15rem)_8.5rem_11rem_minmax(0,1fr)]",
-        "items-center gap-x-3 pr-2 hover:bg-surfaceHover/50 transition-colors",
-        // The status reads as a block of colour, and a row that needs
-        // attention tints whole rather than hinting at one edge.
+        // The tint spans the full window while the columns stop at the cap —
+        // banding that stopped mid-screen read as a rendering fault.
+        "group/row hover:bg-surfaceHover/50 transition-colors",
         sev === "alert" ? "bg-alert/[0.07]" : sev === "warn" ? "bg-warn/[0.05]" : zebra ? "bg-surface/25" : "",
       )}
       title={r.path}
     >
+      <div
+        className={cn(
+          // Fixed columns rather than fractions: repo names and semver strings
+          // both sit in a narrow, predictable width range, so letting them
+          // stretch only pushes the eye across empty space.
+          "grid grid-cols-[6px_minmax(7rem,13rem)_minmax(0,1fr)] md:grid-cols-[6px_minmax(9rem,15rem)_8.5rem_11rem_minmax(0,1fr)]",
+          "items-center gap-x-3 pr-2 max-w-[64rem]",
+        )}
+      >
       <div
         className={cn(
           "h-7 w-1.5",
@@ -94,6 +99,7 @@ export function RepoRow({ r, zebra }: { r: RepoStatus; zebra: boolean }) {
           r.flags.map((f) => <Flag key={f} text={f} />)
         )}
       </div>
+    </div>
     </div>
   );
 }

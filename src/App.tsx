@@ -3,7 +3,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { ChevronDown, ChevronRight, GitBranch, RefreshCw, TriangleAlert } from "lucide-react";
 import { cn } from "./lib/cn";
 import { loadPrefs, savePrefs, type Prefs } from "./lib/prefs";
-import { scanRepos, severity, type RepoStatus } from "./lib/tauri";
+import { counts, matches, scanRepos, type Filter, type RepoStatus } from "./lib/tauri";
 import { RepoRow } from "./components/RepoRow";
 
 // Suite rule: the version chip shows only major.minor.patch; any pre-release
@@ -17,7 +17,7 @@ export default function App() {
   const [appVersion, setAppVersion] = useState<string | null>(null);
   const [scannedAt, setScannedAt] = useState<Date | null>(null);
   const [wasFetched, setWasFetched] = useState(false);
-  const [onlyProblems, setOnlyProblems] = useState(false);
+  const [filter, setFilter] = useState<Filter>("all");
   const [prefs, setPrefs] = useState<Prefs>(loadPrefs);
 
   useEffect(() => {
@@ -53,10 +53,8 @@ export default function App() {
     void run(false);
   }, [run]);
 
-  const shown = useMemo(
-    () => (onlyProblems ? repos.filter((r) => severity(r) !== "ok") : repos),
-    [repos, onlyProblems],
-  );
+  const shown = useMemo(() => repos.filter((r) => matches(r, filter)), [repos, filter]);
+  const total = useMemo(() => counts(repos), [repos]);
 
   const grouped = useMemo(() => {
     const by = new Map<string, RepoStatus[]>();
@@ -76,7 +74,6 @@ export default function App() {
     update((p) => ({ ...p, collapsed: labels, seeded: true }));
   }, [repos, prefs.seeded, update]);
 
-  const problems = useMemo(() => repos.filter((r) => severity(r) !== "ok").length, [repos]);
   const collapsed = useMemo(() => new Set(prefs.collapsed), [prefs.collapsed]);
 
   const toggle = (label: string) =>
@@ -116,16 +113,29 @@ export default function App() {
           >
             {allCollapsed ? "expand" : "collapse"}
           </button>
-          <button
-            onClick={() => setOnlyProblems((v) => !v)}
-            className={cn(
-              "px-2 py-1 rounded text-xs font-mono transition-colors",
-              onlyProblems ? "bg-warn/15 text-warn" : "text-muted hover:text-fg hover:bg-fg/5",
-            )}
-            title="Show only repos with something worth looking at"
-          >
-            {problems}▲
-          </button>
+          <div className="flex items-center rounded overflow-hidden border border-surfaceHover">
+            {(
+              [
+                ["all", repos.length, "text-fg", "Everything"],
+                ["clean", total.clean, "text-ok", "Nothing to do"],
+                ["dirty", total.dirty, "text-warn", "Work in progress — uncommitted, unpushed or behind"],
+                ["https", repos.filter((r) => r.remoteKind === "https").length, "text-alert", "Credential-less https remotes — these 403 on push"],
+              ] as const
+            ).map(([key, n, tone, hint]) => (
+              <button
+                key={key}
+                onClick={() => setFilter(key)}
+                title={hint}
+                className={cn(
+                  "px-2 py-1 text-xs font-mono transition-colors",
+                  filter === key ? "bg-surfaceHover text-fg" : "text-muted hover:text-fg hover:bg-fg/5",
+                )}
+              >
+                {key}
+                <span className={cn("ml-1 tabular-nums", filter === key ? tone : "text-muted/50")}>{n}</span>
+              </button>
+            ))}
+          </div>
           <button
             onClick={() => void run(false)}
             disabled={busy}
@@ -164,12 +174,11 @@ export default function App() {
       {error && <div className="px-2.5 py-1 bg-alert/10 text-alert text-[11px] break-all">{error}</div>}
 
       <main className="flex-1 overflow-y-auto">
-        <div className="max-w-[64rem]">
         {grouped.map(([label, rows]) => {
           // A filter is itself a request to see what matched, so it overrides
           // the collapse state rather than hiding the results behind it.
-          const isOpen = onlyProblems || !collapsed.has(label);
-          const bad = rows.filter((r) => severity(r) !== "ok").length;
+          const isOpen = filter !== "all" || !collapsed.has(label);
+          const c = counts(rows);
           return (
             <section key={label}>
               <button
@@ -184,10 +193,17 @@ export default function App() {
                 <span className="text-xs uppercase tracking-wider text-fg/80 font-medium">{label}</span>
                 {/* Collapsing hides detail, never signal: a closed group still
                     says how much inside it needs looking at. */}
-                <span className="text-[11px] font-mono text-muted/60 tabular-nums">{rows.length}</span>
-                {bad > 0 && (
-                  <span className="text-[11px] font-mono px-1.5 rounded bg-alert/25 text-alert tabular-nums font-semibold">{bad}</span>
-                )}
+                {/* A breakdown, not an alarm: a group of ten with one bad
+                    remote should not look the same as one that is all bad. */}
+                <span className="ml-auto flex items-center gap-1.5 text-[11px] font-mono tabular-nums">
+                  {c.clean > 0 && <span className="text-ok/70" title={`${c.clean} clean`}>{c.clean}</span>}
+                  {c.dirty > 0 && <span className="text-warn" title={`${c.dirty} with local work`}>{c.dirty}</span>}
+                  {c.config > 0 && (
+                    <span className="px-1.5 rounded bg-alert/25 text-alert font-semibold" title={`${c.config} needing a fix`}>
+                      {c.config}
+                    </span>
+                  )}
+                </span>
               </button>
               {isOpen && rows.map((r, i) => <RepoRow key={r.path} r={r} zebra={i % 2 === 1} />)}
             </section>
@@ -195,10 +211,9 @@ export default function App() {
         })}
         {grouped.length === 0 && !busy && (
           <p className="px-3 py-8 text-[11px] text-muted text-center">
-            {onlyProblems ? "Nothing to look at." : "No checkouts found — roots live in gtrack.json."}
+            {filter !== "all" ? `Nothing matches "${filter}".` : "No checkouts found — roots live in gtrack.json."}
           </p>
         )}
-        </div>
       </main>
 
       <footer className="px-2.5 py-1 border-t border-surface/60 text-[11px] text-muted flex items-center gap-3 leading-snug">

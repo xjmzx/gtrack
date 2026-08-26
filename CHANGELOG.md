@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+- **Three lenses instead of one alarm.** The single "show problems" toggle is
+  now a segmented filter — `all` / `clean` / `dirty` / `https` — each carrying
+  its own count. The split is meaningful, not cosmetic: `dirty` is work you did
+  and can finish (uncommitted, unpushed, behind), `config` is the setup being
+  wrong in a way that bites later (a remote that 403s, a lock blocking writes,
+  three version files disagreeing).
+- **Per-group counts are a breakdown, not a warning.** A group of ten with one
+  bad remote no longer looks like a group that is entirely broken: clean, local
+  work and needs-a-fix are three separate figures in three tones, with only the
+  last in red.
+- **Fixed: banding stopped mid-screen.** Row tint and zebra now span the full
+  window while the columns stay capped, instead of ending at the column cap
+  while group headers ran full width — which read as a rendering fault at
+  fullscreen.
+- **Severity now derives from the flags Rust computed** rather than being
+  recomputed in TypeScript from raw fields. Duplicating that judgement across
+  the IPC boundary is what let a serialisation bug colour broken repos green
+  while their own flags said otherwise.
+
 - **Fixed: every repo reported itself untagged.** `RepoStatus` serialised as
   snake_case while the webview read camelCase, so `latestTag`, `tagDate`,
   `commitsSinceTag`, `remoteKind` and `fetchError` all arrived as `undefined`.
