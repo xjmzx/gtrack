@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- PLACEHOLDER. The suite's icon masters live in the Figma set and are
+       exported per app; this is a stand-in so gtrack does not share nping's
+       mark in a launcher. Replace from the Figma export when one exists. -->
+  <rect width="512" height="512" rx="96" fill="#0b0f14"/>
+  <g stroke="#7af0cd" stroke-width="34" stroke-linecap="round" fill="none">
+    <path d="M170 128 V300"/>
+    <path d="M170 300 q0 68 68 68 h36"/>
+  </g>
+  <circle cx="170" cy="112" r="42" fill="#7af0cd"/>
+  <circle cx="170" cy="384" r="42" fill="#7af0cd"/>
+  <circle cx="342" cy="368" r="42" fill="#a78bfa"/>
+  <circle cx="342" cy="150" r="42" fill="#a78bfa"/>
+  <path d="M342 192 V326" stroke="#a78bfa" stroke-width="34" stroke-linecap="round"/>
+</svg>

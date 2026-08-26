@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=gtrack
+GenericName=Nostr Relay Tester
+Comment=Check Nostr relay connectivity — connect, subscribe round-trip, NIP-11 (ndisc suite)
+Exec=@BINDIR@/gtrack
+Icon=@ICONDIR@/gtrack.svg
+Terminal=false
+Categories=Network;Utility;
+Keywords=nostr;relay;ping;connectivity;websocket;ndisc;
+StartupNotify=true
