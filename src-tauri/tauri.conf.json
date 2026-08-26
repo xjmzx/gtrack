@@ -13,10 +13,10 @@
     "windows": [
       {
         "title": "gtrack",
-        "width": 1080,
-        "height": 720,
-        "minWidth": 720,
-        "minHeight": 420
+        "width": 760,
+        "height": 560,
+        "minWidth": 460,
+        "minHeight": 320
       }
     ],
     "security": {

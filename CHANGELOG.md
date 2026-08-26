@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+- **Collapsible groups, collapsed by default.** With fifty-odd checkouts an
+  expanded list is a wall, and the tool is used one project at a time. Click a
+  group header to open it; the state persists per machine.
+- **Collapsing hides detail, never signal.** A closed group still shows how
+  many repos it holds and, in alert colour, how many of them need looking at —
+  so you never have to open all of them to find out where the problem is.
+- **A filter overrides collapse.** Turning on the problems-only view is itself
+  a request to see what matched, so it opens what it filters to rather than
+  leaving results hidden behind a closed section.
+- **Compact throughout.** Default window 760×560 (from 1080×720), minimum
+  460×320, tighter rows and a denser header, so it can sit beside something
+  else rather than needing a screen of its own. The release column is the
+  first thing dropped as the window narrows — it is reference, where the flags
+  are the reason to look.
+
 ## v0.1.0
 
 First release. A read-only tracker for the git checkouts on this machine.
