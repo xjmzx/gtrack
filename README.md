@@ -73,7 +73,14 @@ cargo run --example scan -- --fetch # fetch tracked remotes first
 
 ## Status
 
-v0.1.0 — the scan, the grouping, and the version/release/health view.
+v0.1.1 — the scan, the grouping, and the version/release/health view, built
+and installed on macOS, Windows and Linux from the same tree.
+
+Findings are graded rather than lumped together: red is a fault (`stale lock`,
+`unreachable`, `no upstream`, `version mismatch`), amber is work in progress,
+mauve is an `https remote` — a preference, since it fetches and usually pushes
+— and grey is an `archive`, a repository with no remote kept deliberately as
+the only copy of what is in it.
 
 Not yet: per-repo tag history and distance to a stable 1.0; the second pinning
 axis, tracking which consumers have re-vendored which frozen contract SHA. The

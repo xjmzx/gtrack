@@ -1,6 +1,45 @@
 # Changelog
 
-## Unreleased
+## v0.1.1
+
+Verified on all three platforms: built and installed on macOS, Windows and
+Linux from the same tree.
+
+- **An archive is its own state, in grey, and no longer reads as a fault.**
+  `no upstream` covered two different things and only one of them is a
+  problem. A repository with *no remote at all* is a deliberate local archive —
+  a tree kept on purpose after its remote went away, holding the only copy of
+  what is in it. A branch that tracks nothing *while a remote exists* is the
+  alarming case: work with somewhere to go and no route to it. The first now
+  flags as `archive`, greys its own row and takes its own lens and count; the
+  second keeps `no upstream` and stays red. Prompted by a real one — a
+  276-file channel-backup archive whose GitHub repo had been deleted, which
+  the old flag painted as rot.
+- **`https remote` is a preference, not an emergency.** It now carries the
+  mauve of `track` in the wordmark rather than the red of a fault, with its own
+  bucket and a tint faint enough to find but not to alarm. An https remote
+  fetches perfectly well and usually pushes; wanting every remote on an SSH
+  alias — so GitHub actions run as the right account — is a house rule, and
+  red made a tidy machine look like an emergency over a naming choice. The
+  things that are genuinely broken keep the red to themselves: `stale lock`,
+  `unreachable`, `no upstream` and `version mismatch`.
+- **The headless scanner counts archives separately** rather than reporting a
+  machine with nothing wrong as having something wrong on every run.
+- **Fixed: the desktop entry described nping.** `gtrack.desktop.in` was that
+  file with the name and paths swapped, so gtrack installed itself as a "Nostr
+  Relay Tester" filed under Network, and searching a launcher for "git" or
+  "repo" found nothing. Now `Development;RevisionControl;` with its own
+  keywords. Linux-only, and written at install time, so neither of the other
+  two platforms could see it.
+- **Fixed: `make test` did not exist**, though both the README and CLAUDE.md
+  documented it.
+- **Windows: git no longer flashes a console window per call**, and `~`
+  expands from `USERPROFILE`. A scan is roughly ten git invocations per
+  repository, so fifteen checkouts flashed some hundred and fifty windows over
+  the app and took focus with every one. `expand()` read `HOME`, which Windows
+  does not set for a process launched from Explorer, so the default roots
+  resolved to nothing and the window came up empty with nothing to explain
+  why. Both are `cfg`-guarded; macOS and Linux are unchanged.
 
 - **Roots carry an explicit label.** A group heading derived from a directory
   name changes per machine — `~/code_upleb` is somewhere else on another box —
