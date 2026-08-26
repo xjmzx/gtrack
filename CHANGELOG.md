@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **Roots carry an explicit label.** A group heading derived from a directory
+  name changes per machine — `~/code_upleb` is somewhere else on another box —
+  so the same collection of repositories would head up under a different name
+  on each install. Labels are now configured; the website trees default to
+  reading as their domains (`upleb.uk`, `fizx.uk`) rather than their checkout
+  paths. A root written as a bare string, the shape before labels existed,
+  still parses and falls back to the directory name.
+
 - **Three lenses instead of one alarm.** The single "show problems" toggle is
   now a segmented filter — `all` / `clean` / `dirty` / `https` — each carrying
   its own count. The split is meaningful, not cosmetic: `dirty` is work you did

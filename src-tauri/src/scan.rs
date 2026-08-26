@@ -166,12 +166,8 @@ fn stale_locks(git_dir: &Path, depth: usize, out: &mut Vec<String>) {
 fn discover(cfg: &Config) -> Vec<(PathBuf, String)> {
     let mut found = Vec::new();
     for root in &cfg.roots {
-        let root_path = crate::config::expand(root);
-        let label = root_path
-            .file_name()
-            .and_then(|s| s.to_str())
-            .unwrap_or("?")
-            .to_string();
+        let root_path = crate::config::expand(&root.path);
+        let label = root.heading();
         let Ok(entries) = std::fs::read_dir(&root_path) else { continue };
         for e in entries.flatten() {
             let p = e.path();

@@ -43,8 +43,16 @@ export interface Group {
   repos: string[];
 }
 
+export interface Root {
+  path: string;
+  /** Heading for repos this root's named groups don't claim. Explicit rather
+   *  than derived from the directory name, because the same collection lives
+   *  at different paths on different machines. */
+  label: string | null;
+}
+
 export interface Config {
-  roots: string[];
+  roots: Root[];
   groups: Group[];
 }
 

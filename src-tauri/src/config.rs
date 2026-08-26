@@ -19,23 +19,79 @@ pub struct Group {
     pub repos: Vec<String>,
 }
 
+/// A directory whose immediate children are checkouts.
+///
+/// The label is explicit rather than derived from the directory name, because
+/// the same collection of repositories lives at different paths on different
+/// machines. `~/code_upleb` here is something else on the Linux box, and a
+/// group heading that changes name per install is not a heading — it is noise.
+#[derive(Serialize, Clone, Debug, Deserialize)]
+#[serde(from = "RootRepr")]
+pub struct Root {
+    /// `~` is expanded.
+    pub path: String,
+    /// Heading for repos in this root that no named group claims. Falls back
+    /// to the directory name when absent.
+    pub label: Option<String>,
+}
+
+/// Accepts either a bare path string — the shape before labels existed — or a
+/// full object. A config written by an older install must keep working, and
+/// silently resetting someone's roots would be worse than either.
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum RootRepr {
+    Bare(String),
+    Full {
+        path: String,
+        #[serde(default)]
+        label: Option<String>,
+    },
+}
+
+impl From<RootRepr> for Root {
+    fn from(r: RootRepr) -> Self {
+        match r {
+            RootRepr::Bare(path) => Root { path, label: None },
+            RootRepr::Full { path, label } => Root { path, label },
+        }
+    }
+}
+
+impl Root {
+    /// The heading to file unclaimed repos under.
+    pub fn heading(&self) -> String {
+        self.label.clone().unwrap_or_else(|| {
+            expand(&self.path)
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or("?")
+                .to_string()
+        })
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Config {
-    /// Directories whose immediate children are checkouts. `~` is expanded.
     #[serde(default = "default_roots")]
-    pub roots: Vec<String>,
+    pub roots: Vec<Root>,
     #[serde(default = "default_groups")]
     pub groups: Vec<Group>,
 }
 
-fn default_roots() -> Vec<String> {
-    vec![
-        "~/code_gh/xjmzx".into(),
-        "~/code_gh/macos-node".into(),
-        "~/code_gh/adjmx".into(),
-        "~/code_upleb".into(),
-        "~/code_vibe".into(),
+fn default_roots() -> Vec<Root> {
+    // Labels chosen for what the directory *is*, not what it is called: the
+    // website trees read better as their domains than as their checkout paths.
+    [
+        ("~/code_gh/xjmzx", "xjmzx"),
+        ("~/code_gh/macos-node", "macos-node"),
+        ("~/code_gh/adjmx", "adjmx"),
+        ("~/code_upleb", "upleb.uk"),
+        ("~/code_vibe", "fizx.uk"),
     ]
+    .into_iter()
+    .map(|(path, label)| Root { path: path.into(), label: Some(label.into()) })
+    .collect()
 }
 
 fn default_groups() -> Vec<Group> {
@@ -139,5 +195,31 @@ mod tests {
         std::env::set_var("HOME", "/home/test");
         assert_eq!(expand("~/code"), PathBuf::from("/home/test/code"));
         assert_eq!(expand("/abs/path"), PathBuf::from("/abs/path"));
+    }
+
+    #[test]
+    fn a_bare_string_root_still_parses() {
+        // The shape written before labels existed.
+        let cfg: Config = serde_json::from_str(r#"{"roots":["~/code_gh/xjmzx"],"groups":[]}"#).unwrap();
+        assert_eq!(cfg.roots.len(), 1);
+        assert_eq!(cfg.roots[0].path, "~/code_gh/xjmzx");
+        assert_eq!(cfg.roots[0].label, None);
+        // With no label it falls back to the directory name.
+        assert_eq!(cfg.roots[0].heading(), "xjmzx");
+    }
+
+    #[test]
+    fn a_labelled_root_uses_its_label() {
+        let cfg: Config =
+            serde_json::from_str(r#"{"roots":[{"path":"~/code_upleb","label":"upleb.uk"}],"groups":[]}"#).unwrap();
+        assert_eq!(cfg.roots[0].heading(), "upleb.uk");
+    }
+
+    #[test]
+    fn defaults_label_the_website_trees_by_domain() {
+        let c = Config::default();
+        let headings: Vec<String> = c.roots.iter().map(|r| r.heading()).collect();
+        assert!(headings.contains(&"upleb.uk".to_string()));
+        assert!(headings.contains(&"fizx.uk".to_string()));
     }
 }
