@@ -96,7 +96,7 @@ version:
 	@test -n "$(V)" || { echo "usage: make version V=0.1.2" >&2; exit 2; }
 	@npm version --no-git-tag-version --allow-same-version "$(V)" >/dev/null
 	@sed -i.bak -E 's/^version = ".*"/version = "$(V)"/' src-tauri/Cargo.toml && rm -f src-tauri/Cargo.toml.bak
-	@python3 -c 'import json,sys; p="src-tauri/tauri.conf.json"; d=json.load(open(p)); d["version"]=sys.argv[1]; open(p,"w").write(json.dumps(d,indent=2)+"\n")' "$(V)"
-	@cd src-tauri && cargo check --quiet 2>/dev/null   # rewrites Cargo.lock's entry for this crate
+	@python3 -c 'import re,sys; v=sys.argv[1]; p="src-tauri/tauri.conf.json"; s=open(p).read(); s2,k=re.subn(r"^(  \"version\"\s*:\s*)\"[^\"]*\"", lambda m: m.group(1)+"\""+v+"\"", s, count=1, flags=re.M); open(p,"w").write(s2) if k==1 else sys.exit("no top-level version key in "+p)' "$(V)"
+	@name=$$(grep -m1 '^name = ' src-tauri/Cargo.toml | cut -d'"' -f2); python3 -c 'import re,sys; n,v=sys.argv[1],sys.argv[2]; p="src-tauri/Cargo.lock"; s=open(p).read(); s2,k=re.subn(r"(\[\[package\]\]\nname = \""+re.escape(n)+r"\"\nversion = )\"[^\"]*\"", lambda m: m.group(1)+"\""+v+"\"", s, count=1); open(p,"w").write(s2) if k==1 else sys.exit("no Cargo.lock entry for "+n)' "$$name" "$(V)"
 	@echo "version set to $(V) in all five places:"
 	@git diff --stat -- package.json package-lock.json src-tauri/Cargo.toml src-tauri/Cargo.lock src-tauri/tauri.conf.json
