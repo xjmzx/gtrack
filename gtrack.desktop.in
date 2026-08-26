@@ -2,11 +2,11 @@
 Type=Application
 Version=1.0
 Name=gtrack
-GenericName=Nostr Relay Tester
-Comment=Check Nostr relay connectivity — connect, subscribe round-trip, NIP-11 (ndisc suite)
+GenericName=Git Checkout Tracker
+Comment=Read-only view of the git checkouts on this machine — versions, releases and repo health (ndisc suite)
 Exec=@BINDIR@/gtrack
 Icon=@ICONDIR@/gtrack.svg
 Terminal=false
-Categories=Network;Utility;
-Keywords=nostr;relay;ping;connectivity;websocket;ndisc;
+Categories=Development;RevisionControl;
+Keywords=git;repository;checkout;version;tag;release;status;ndisc;
 StartupNotify=true
