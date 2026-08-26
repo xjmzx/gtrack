@@ -32,5 +32,13 @@ fn main() {
             if r.flags.is_empty() { "clean".to_string() } else { r.flags.join(", ") }
         );
     }
-    println!("\n{} repos, {} with findings", rows.len(), rows.iter().filter(|r| !r.flags.is_empty()).count());
+    // An archive is a state, not a finding: counting it as one would report a
+    // machine with nothing wrong as having something wrong, every single run.
+    let findings = rows.iter().filter(|r| r.flags.iter().any(|f| f != "archive")).count();
+    let archived = rows.iter().filter(|r| r.flags.iter().any(|f| f == "archive")).count();
+    print!("\n{} repos, {findings} with findings", rows.len());
+    if archived > 0 {
+        print!(", {archived} archived");
+    }
+    println!();
 }

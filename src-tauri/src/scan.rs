@@ -199,6 +199,23 @@ fn discover(cfg: &Config) -> Vec<(PathBuf, String)> {
     found
 }
 
+/// Whether a repository is rooted anywhere, as a flag — or `None` when it is.
+///
+/// Two different things used to share the `no upstream` flag, and only one of
+/// them is a fault. A repository with **no remote at all** is a deliberate
+/// local archive: a tree kept on purpose after its remote went away, whose
+/// contents live nowhere else. A branch that tracks nothing **while a remote
+/// exists** is the alarming case — work with somewhere to go and no route to
+/// it. Colouring the first red made a considered decision look like rot, and
+/// buried the second among it.
+fn rootedness(remote_kind: RemoteKind, has_upstream: bool) -> Option<&'static str> {
+    match (remote_kind, has_upstream) {
+        (RemoteKind::None, _) => Some("archive"),
+        (_, false) => Some("no upstream"),
+        (_, true) => None,
+    }
+}
+
 fn inspect(path: &Path, root_label: &str, cfg: &Config, fetch: bool) -> RepoStatus {
     let name = path.file_name().and_then(|s| s.to_str()).unwrap_or("?").to_string();
     let group = cfg.group_for(&name).unwrap_or(root_label).to_string();
@@ -262,8 +279,8 @@ fn inspect(path: &Path, root_label: &str, cfg: &Config, fetch: bool) -> RepoStat
     if !locks.is_empty() {
         flags.push("stale lock".into());
     }
-    if upstream.is_none() {
-        flags.push("no upstream".into());
+    if let Some(f) = rootedness(remote_kind, upstream.is_some()) {
+        flags.push(f.into());
     }
     if fetch_error.is_some() {
         flags.push("unreachable".into());
@@ -331,6 +348,18 @@ mod tests {
         assert_eq!(classify_remote("git@github.com:x/y.git"), RemoteKind::Ssh);
         assert_eq!(classify_remote("github-xjmzx:xjmzx/y.git"), RemoteKind::SshAlias);
         assert_eq!(classify_remote("git@adjmx:adjmx/y.git"), RemoteKind::SshAlias);
+    }
+
+    #[test]
+    fn an_archive_is_not_a_broken_remote() {
+        // No remote at all: kept on purpose, not a fault.
+        assert_eq!(rootedness(RemoteKind::None, false), Some("archive"));
+        // A remote exists but the branch tracks nothing — work with no route out.
+        assert_eq!(rootedness(RemoteKind::SshAlias, false), Some("no upstream"));
+        assert_eq!(rootedness(RemoteKind::Https, false), Some("no upstream"));
+        // Rooted: no flag either way.
+        assert_eq!(rootedness(RemoteKind::SshAlias, true), None);
+        assert_eq!(rootedness(RemoteKind::Ssh, true), None);
     }
 
     #[test]

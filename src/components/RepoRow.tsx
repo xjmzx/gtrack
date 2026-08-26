@@ -19,21 +19,35 @@ function Version({ r }: { r: RepoStatus }) {
   );
 }
 
-const ALERT_FLAGS = new Set([
-  "stale lock",
-  "no upstream",
-  "unreachable",
-  "https remote",
-  "version mismatch",
-]);
+const ALERT_FLAGS = new Set(["stale lock", "no upstream", "unreachable", "version mismatch"]);
+
+/** Flags that describe how a repository is set up rather than reporting a
+ *  fault, each with its own tone and none of them red.
+ *
+ *  `archive` is grey: where the repo lives, nothing wrong with it. `https
+ *  remote` takes the mauve of `track` in the wordmark — a house preference,
+ *  visible but not shouted, since an https remote fetches and usually pushes
+ *  perfectly well. */
+const STATE_FLAGS: Record<string, { tone: string; hint: string }> = {
+  archive: {
+    tone: "bg-muted/15 text-muted",
+    hint: "No remote — kept deliberately as a local-only archive",
+  },
+  "https remote": {
+    tone: "bg-mauve/15 text-mauve",
+    hint: "Remote is https — prefer an SSH alias so GitHub actions run as the right account",
+  },
+};
 
 function Flag({ text }: { text: string }) {
+  const state = STATE_FLAGS[text];
+  const tone = ALERT_FLAGS.has(text)
+    ? "bg-alert/20 text-alert"
+    : (state?.tone ?? "bg-surfaceHover/70 text-fg/70");
   return (
     <span
-      className={cn(
-        "px-1.5 py-px rounded text-[11px] font-mono shrink-0 leading-snug",
-        ALERT_FLAGS.has(text) ? "bg-alert/20 text-alert" : "bg-surfaceHover/70 text-fg/70",
-      )}
+      className={cn("px-1.5 py-px rounded text-[11px] font-mono shrink-0 leading-snug", tone)}
+      title={state?.hint}
     >
       {text}
     </span>
@@ -48,7 +62,18 @@ export function RepoRow({ r, zebra }: { r: RepoStatus; zebra: boolean }) {
         // The tint spans the full window while the columns stop at the cap —
         // banding that stopped mid-screen read as a rendering fault.
         "group/row hover:bg-surfaceHover/50 transition-colors",
-        sev === "alert" ? "bg-alert/[0.07]" : sev === "warn" ? "bg-warn/[0.05]" : zebra ? "bg-surface/25" : "",
+        // An archive takes the plain zebra: it is a settled state, and tinting
+        // it would put it back among the rows that want doing something about.
+        // https gets a tint faint enough to find but not to alarm.
+        sev === "alert"
+          ? "bg-alert/[0.07]"
+          : sev === "warn"
+            ? "bg-warn/[0.05]"
+            : sev === "https"
+              ? "bg-mauve/[0.05]"
+              : zebra
+                ? "bg-surface/25"
+                : "",
       )}
       title={r.path}
     >
@@ -64,7 +89,15 @@ export function RepoRow({ r, zebra }: { r: RepoStatus; zebra: boolean }) {
       <div
         className={cn(
           "h-7 w-1.5",
-          sev === "alert" ? "bg-alert" : sev === "warn" ? "bg-warn" : "bg-ok/50",
+          sev === "alert"
+            ? "bg-alert"
+            : sev === "warn"
+              ? "bg-warn"
+              : sev === "archive"
+                ? "bg-muted/40"
+                : sev === "https"
+                  ? "bg-mauve/60"
+                  : "bg-ok/50",
         )}
       />
 
