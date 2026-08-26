@@ -1,0 +1,18 @@
+# Line endings: LF in the repository and in every working tree.
+#
+# Git for Windows defaults to core.autocrlf=true, so without this file the
+# answer is per-clone: a Windows tree reports unchanged files as modified, and
+# a CRLF blob can be committed into a file the Linux and macOS boxes hold as
+# LF. On 26 Aug 2026 a CRLF-only Cargo.toml blocked a fast-forward pull that
+# had nothing to merge — this costs time long before it corrupts anything.
+#
+# eol=lf rather than a bare text=auto: normalising only the repository still
+# leaves Windows checkouts CRLF, which is where the phantom-modified files
+# come from.
+* text=auto eol=lf
+
+# Binaries — the only non-text committed to these repos. Listed explicitly
+# rather than trusting content sniffing.
+*.png  binary
+*.ico  binary
+*.icns binary
