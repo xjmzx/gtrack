@@ -313,7 +313,11 @@ fn inspect(path: &Path, root_label: &str, cfg: &Config, fetch: bool) -> RepoStat
     if !locks.is_empty() {
         flags.push("stale lock".into());
     }
-    if let Some(f) = rootedness(remote_kind, upstream.is_some()) {
+    // A declared retirement outranks the derived reading: the repo still has a
+    // remote and a route out, so nothing on disk would ever reveal it.
+    if cfg.is_archived(&name) {
+        flags.push("archive".into());
+    } else if let Some(f) = rootedness(remote_kind, upstream.is_some()) {
         flags.push(f.into());
     }
     if fetch_error.is_some() {

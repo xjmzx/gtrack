@@ -2,12 +2,32 @@
 //! text. Useful for checking the scanner against a real machine, and for a
 //! quick sweep over ssh where no GUI exists.
 //!
-//!   cargo run --example scan            # local refs only
-//!   cargo run --example scan -- --fetch # fetch tracked remotes first
+//!   cargo run --release --example scan            # local refs only
+//!   cargo run --release --example scan -- --fetch # fetch tracked remotes first
+//!
+//! Use `--release`. Without it this is a debug build, and the dev/release
+//! split means a debug build reads `gtrack.dev.json` while the installed app
+//! reads `gtrack.json` — so a plain `cargo run` quietly reports on a different
+//! configuration than the window shows.
 
 fn main() {
     let fetch = std::env::args().any(|a| a == "--fetch");
-    let cfg = gtrack_lib::config::Config::default();
+    // Read the same config the installed app reads, so this and the window
+    // agree. Falls back to defaults when there is no config file, which is
+    // also what the app does.
+    let cfg = match gtrack_lib::config::platform_config_dir() {
+        Some(dir) => match gtrack_lib::config::load(&dir) {
+            Ok(c) => {
+                println!("config: {}", dir.display());
+                c
+            }
+            Err(e) => {
+                eprintln!("config unreadable ({e}) — using defaults");
+                gtrack_lib::config::Config::default()
+            }
+        },
+        None => gtrack_lib::config::Config::default(),
+    };
     let mut rows = gtrack_lib::scan::scan(&cfg, fetch);
     // Group contiguously, or a group's header prints once per run of rows.
     rows.sort_by(|a, b| (&a.group, &a.name).cmp(&(&b.group, &b.name)));

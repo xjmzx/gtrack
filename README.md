@@ -67,9 +67,13 @@ exists:
 
 ```sh
 cd src-tauri
-cargo run --example scan            # local refs only
-cargo run --example scan -- --fetch # fetch tracked remotes first
+cargo run --release --example scan            # local refs only
+cargo run --release --example scan -- --fetch # fetch tracked remotes first
 ```
+
+`--release` matters: a debug build reads `gtrack.dev.json` while the installed
+app reads `gtrack.json`, so without it the scanner reports on a different
+configuration than the window shows.
 
 ## Status
 

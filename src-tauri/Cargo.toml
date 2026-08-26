@@ -1,6 +1,6 @@
 [package]
 name = "gtrack"
-version = "0.1.3"
+version = "0.1.4"
 description = "Read-only tracker for git checkouts: versions, releases and repo health"
 authors = ["xjmzx"]
 edition = "2021"

@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.1.4
+
+- **Archives can be declared, not only derived.** A repository with no remote
+  is *derived* to be an archive — the evidence is on disk. A repository whose
+  remote still exists but has been retired leaves no local evidence at all, so
+  it is now declared: an `archived` list of repo names in `gtrack.json`. Asking
+  GitHub instead would mean a network call per repository on every scan, for a
+  fact that changes perhaps twice a year and is a decision rather than a
+  measurement. A declared archive outranks the derived reading; other flags on
+  the row are untouched, so a retired repo with uncommitted work still says so.
+- **The headless scanner reads the real config.** It built `Config::default()`
+  and so reported on configuration the app was not using — a second tool
+  wearing the first one's name. It now resolves the same path Tauri does.
+  **Run it with `--release`**: a debug build reads `gtrack.dev.json` while the
+  installed app reads `gtrack.json`, which is the dev/release split working and
+  a good way to confuse yourself.
+
 ## v0.1.3
 
 - **Release workflow.** A `v*` tag now builds all three platforms gtrack is

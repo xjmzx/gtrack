@@ -56,6 +56,10 @@ export interface Root {
 export interface Config {
   roots: Root[];
   groups: Group[];
+  /** Repos retired on purpose. A repo with no remote is *derived* to be an
+   *  archive; this is the other half — one whose remote still exists but has
+   *  been retired, which nothing on disk could reveal. */
+  archived: string[];
 }
 
 export const loadConfig = () => invoke<Config>("load_config");

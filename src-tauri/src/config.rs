@@ -77,6 +77,17 @@ pub struct Config {
     pub roots: Vec<Root>,
     #[serde(default = "default_groups")]
     pub groups: Vec<Group>,
+    /// Repositories retired on purpose, by name.
+    ///
+    /// A repo with no remote at all is *derived* to be an archive — the
+    /// evidence is on disk. This list is the other half: a repo whose remote
+    /// still exists but has been retired, which no local evidence can show.
+    /// GitHub's own archived flag is the authority, and asking it would mean
+    /// a network call per repository on every scan for a fact that changes
+    /// perhaps twice a year. Declaring it is cheaper, instant, offline, and
+    /// says the true thing — that this is a decision, not a measurement.
+    #[serde(default)]
+    pub archived: Vec<String>,
 }
 
 fn default_roots() -> Vec<Root> {
@@ -120,11 +131,17 @@ impl Default for Config {
         Self {
             roots: default_roots(),
             groups: default_groups(),
+            archived: Vec::new(),
         }
     }
 }
 
 impl Config {
+    /// Whether this repo has been declared retired.
+    pub fn is_archived(&self, repo_name: &str) -> bool {
+        self.archived.iter().any(|a| a == repo_name)
+    }
+
     /// Group label for a repo directory name, or `None` to fall back to its root.
     pub fn group_for(&self, repo_name: &str) -> Option<&str> {
         self.groups
@@ -159,6 +176,28 @@ fn home() -> Option<PathBuf> {
         .filter_map(std::env::var_os)
         .find(|v| !v.is_empty())
         .map(PathBuf::from)
+}
+
+/// Where the installed app keeps its config, resolved without Tauri.
+///
+/// The app itself asks Tauri for this and that stays authoritative; this
+/// mirrors the same rule so the headless scanner reads what the window reads.
+/// A scanner that silently used built-in defaults while the app used a config
+/// file would be a second tool wearing the first one's name — which it was,
+/// until this existed.
+pub fn platform_config_dir() -> Option<PathBuf> {
+    const IDENT: &str = "uk.fizx.gtrack";
+    let home = home()?;
+    let base = if cfg!(target_os = "macos") {
+        home.join("Library/Application Support")
+    } else if cfg!(windows) {
+        std::env::var_os("APPDATA").map(PathBuf::from)?
+    } else {
+        std::env::var_os("XDG_CONFIG_HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| home.join(".config"))
+    };
+    Some(base.join(IDENT))
 }
 
 /// Debug builds keep their own config, per the suite convention, so a dev run
@@ -242,5 +281,21 @@ mod tests {
         let headings: Vec<String> = c.roots.iter().map(|r| r.heading()).collect();
         assert!(headings.contains(&"upleb.uk".to_string()));
         assert!(headings.contains(&"fizx.uk".to_string()));
+    }
+
+    #[test]
+    fn a_declared_archive_is_recognised_by_name() {
+        let mut c = Config::default();
+        assert!(!c.is_archived("LRCVZX"));
+        c.archived.push("LRCVZX".into());
+        assert!(c.is_archived("LRCVZX"));
+        assert!(!c.is_archived("LRNS"));
+    }
+
+    #[test]
+    fn a_config_without_the_field_still_parses() {
+        // Every config written before `archived` existed.
+        let c: Config = serde_json::from_str(r#"{"roots":[],"groups":[]}"#).unwrap();
+        assert!(c.archived.is_empty());
     }
 }
