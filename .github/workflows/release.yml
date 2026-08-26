@@ -1,0 +1,192 @@
+name: Release
+
+# Fires on any pushed tag starting with `v` (e.g. v0.1.3, v0.2.0-beta.1) and
+# can also be kicked off manually from the Actions tab. Produces a GitHub
+# Release with .deb and .AppImage for Linux x86_64, a .dmg for macOS arm64,
+# and an NSIS .exe for Windows x86_64 — the three platforms gtrack is used on.
+#
+# Three jobs rather than one because a Tauri app cannot be cross-compiled
+# between them: each build needs its own platform's WebView. Linux runs first
+# and owns the release; the other two append their asset to it, so no two jobs
+# race to create the same release or clobber its notes.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to publish (e.g. v0.1.3)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux-x86_64:
+    name: Build Linux x86_64
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+
+      # The standard Tauri Linux set and nothing more. gtrack holds no secrets,
+      # so unlike nchat there is no libsecret-1-dev here; it reads git and the
+      # filesystem and talks to nothing else.
+      - name: Install Tauri system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libxdo-dev \
+            build-essential \
+            curl wget file
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo target
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install npm deps
+        run: npm ci
+
+      # The unit tests are cheap and cover the parsing this tool's output rests
+      # on — a release that reports the wrong version for every repo would be
+      # worse than no release.
+      - name: Test
+        run: cd src-tauri && cargo test --lib
+
+      # Skip rpm — rpmbuild isn't on the ubuntu runners.
+      - name: Build Tauri bundles (.deb + AppImage)
+        run: npm run tauri build -- --bundles deb,appimage
+
+      - name: Determine tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          fi
+
+      # This job creates the release and owns its notes. `prerelease` is taken
+      # from the tag: anything with a hyphen (v0.2.0-beta.1) is a pre-release,
+      # a plain vX.Y.Z is not.
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: ${{ steps.tag.outputs.tag }}
+          prerelease: ${{ contains(steps.tag.outputs.tag, '-') }}
+          generate_release_notes: true
+          files: |
+            src-tauri/target/release/bundle/appimage/*.AppImage
+            src-tauri/target/release/bundle/deb/*.deb
+
+  build-macos-arm64:
+    name: Build macOS (arm64)
+    # Runs after Linux so the release already exists; this job only appends.
+    needs: build-linux-x86_64
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo target
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install npm deps
+        run: npm ci
+
+      # Unsigned and un-notarised, like the rest of the suite: Gatekeeper
+      # refuses the first launch until the app is opened from the context menu,
+      # or cleared with `xattr -dr com.apple.quarantine /Applications/gtrack.app`.
+      # A CLI download carries no quarantine attribute and sidesteps it.
+      - name: Build Tauri bundle (.dmg)
+        run: npm run tauri build -- --bundles dmg
+
+      - name: Determine tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          fi
+
+      # No `name`/`generate_release_notes` — the Linux job owns those.
+      - name: Upload macOS bundle to release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          files: src-tauri/target/release/bundle/dmg/*.dmg
+
+  build-windows-x86_64:
+    name: Build Windows x86_64
+    needs: build-linux-x86_64
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo target
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install npm deps
+        run: npm ci
+
+      # Windows runners ship the MSVC toolchain and WebView2 runtime, so there
+      # is no apt-get equivalent; the bundler fetches NSIS itself on first run.
+      # NSIS rather than MSI deliberately: WiX rejects a non-numeric version
+      # like 0.2.0-beta.1, so a pre-release tag would fail to bundle at all.
+      - name: Build Tauri bundle (NSIS installer)
+        run: npm run tauri build -- --bundles nsis
+
+      # `shell: bash` is required — the default on windows runners is
+      # PowerShell, which cannot parse the ${GITHUB_REF#refs/tags/} expansion.
+      - name: Determine tag
+        id: tag
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload Windows installer to release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          files: src-tauri/target/release/bundle/nsis/*.exe

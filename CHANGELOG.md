@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.1.3
+
+- **Release workflow.** A `v*` tag now builds all three platforms gtrack is
+  actually used on: `.deb` + `.AppImage` for Linux x86_64, `.dmg` for macOS
+  arm64, `.exe` (NSIS) for Windows x86_64. Three jobs because a Tauri app has
+  no cross-compile path between them — each needs its own platform's WebView.
+  Linux runs first and owns the release; macOS and Windows depend on it and
+  only append their asset, so no two jobs race to create the same release or
+  overwrite its notes. The Linux job runs `cargo test` first: a release that
+  reported the wrong version for every repository would be worse than none.
+  NSIS rather than MSI deliberately — WiX rejects a non-numeric version, so a
+  pre-release tag would fail to bundle at all.
+
 ## v0.1.2
 
 - **`make version V=x.y.z` bumps all five places at once.** Two in
