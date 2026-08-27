@@ -21,10 +21,10 @@ pub struct Group {
 
 /// A directory whose immediate children are checkouts.
 ///
-/// The label is explicit rather than derived from the directory name, because
-/// the same collection of repositories lives at different paths on different
-/// machines. `~/code_upleb` here is something else on the Linux box, and a
-/// group heading that changes name per install is not a heading — it is noise.
+/// The label is kept explicit even though the default roots now agree across
+/// machines: a root is free-form, and a path someone adds by hand is as likely
+/// to be named for where it sits on disk as for what it holds. A heading that
+/// reads as a checkout path is not a heading — it is noise.
 #[derive(Serialize, Clone, Debug, Deserialize)]
 #[serde(from = "RootRepr")]
 pub struct Root {
@@ -126,14 +126,20 @@ pub struct Config {
 }
 
 fn default_roots() -> Vec<Root> {
-    // Labels chosen for what the directory *is*, not what it is called: the
-    // website trees read better as their domains than as their checkout paths.
+    // One root per GitHub identity, all three under `~/code_gh`, and the same
+    // on every platform. The defaults used to carry a machine's own layout —
+    // `~/code_upleb` and `~/code_vibe` beside the `~/code_gh` trees — which
+    // meant a fresh install was right on exactly one box and quietly scanned
+    // nothing on the others. Rooting everything at `~/code_gh` costs a symlink
+    // at most and makes the built-in defaults true wherever they are read.
+    //
+    // The website trees are labelled by identity here rather than by domain:
+    // the domains are groups now (below), because `adjmx` holds the fizx.uk
+    // sites *and* the ledger apps, and a root heading cannot say both.
     [
         ("~/code_gh/xjmzx", "xjmzx"),
-        ("~/code_gh/macos-node", "macos-node"),
         ("~/code_gh/adjmx", "adjmx"),
-        ("~/code_upleb", "upleb.uk"),
-        ("~/code_vibe", "fizx.uk"),
+        ("~/code_gh/macos-node", "macos-node"),
     ]
     .into_iter()
     .map(|(path, label)| Root { path: path.into(), label: Some(label.into()) })
@@ -157,6 +163,42 @@ fn default_groups() -> Vec<Group> {
                 .iter()
                 .map(|s| s.to_string())
                 .collect(),
+        },
+        // The two website sets. They were root headings until the roots became
+        // one-per-identity; as groups they say the true thing, which is that a
+        // domain is a set of repositories and not a place on disk.
+        Group {
+            label: "fizx.uk".into(),
+            repos: [
+                "fizx.uk",
+                "relay.fizx.uk",
+                "blst.fizx.uk",
+                "fx.fizx.uk",
+                "glmps.fizx.uk",
+                "npub.fizx.uk",
+                "pls.fizx.uk",
+                "smpl.fizx.uk",
+                "trth.fizx.uk",
+            ]
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
+        },
+        Group {
+            label: "upleb.uk".into(),
+            repos: [
+                "upleb.uk",
+                "blst.upleb.uk",
+                "fx.upleb.uk",
+                "glmps.upleb.uk",
+                "npub.upleb.uk",
+                "pls.upleb.uk",
+                "smpl.upleb.uk",
+                "trth.upleb.uk",
+            ]
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
         },
     ]
 }
@@ -318,11 +360,25 @@ mod tests {
     }
 
     #[test]
-    fn defaults_label_the_website_trees_by_domain() {
+    fn every_default_root_lives_under_code_gh() {
+        // The point of the convention: the built-in defaults are true on any
+        // machine that follows it, so a fresh install scans something.
+        for r in Config::default().roots {
+            assert!(
+                r.path.starts_with("~/code_gh/"),
+                "default root {} is outside ~/code_gh",
+                r.path
+            );
+        }
+    }
+
+    #[test]
+    fn defaults_group_the_website_trees_by_domain() {
+        // They were root headings once; a root now names an identity, and the
+        // domains are the groups inside it.
         let c = Config::default();
-        let headings: Vec<String> = c.roots.iter().map(|r| r.heading()).collect();
-        assert!(headings.contains(&"upleb.uk".to_string()));
-        assert!(headings.contains(&"fizx.uk".to_string()));
+        assert_eq!(c.group_for("relay.fizx.uk"), Some("fizx.uk"));
+        assert_eq!(c.group_for("blst.upleb.uk"), Some("upleb.uk"));
     }
 
     #[test]

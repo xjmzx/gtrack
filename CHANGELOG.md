@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.1.6
+
+- **One root convention, and the defaults now hold it.** The built-in roots
+  carried a single machine's layout — `~/code_upleb` and `~/code_vibe` beside
+  the `~/code_gh` trees — so a fresh install was right on exactly one box and
+  silently scanned nothing on the others. An empty window is the one failure a
+  scanner cannot report, because it looks identical to a clean sweep. The
+  defaults are now the three identity roots under `~/code_gh`, the same path on
+  every platform, relative to that platform's home directory. A machine that
+  keeps its checkouts elsewhere costs a symlink; a machine that follows the
+  convention costs no configuration at all.
+- **The website trees moved from roots to groups.** `fizx.uk` and `upleb.uk`
+  were root headings back when they were their own directories. They cannot be
+  roots any more and should not have been: `adjmx` holds the fizx.uk sites
+  *and* the ledger apps, and a root heading cannot say both. As groups they say
+  the true thing — a domain is a set of repositories, not a place on disk — and
+  a root heading is left naming what it actually is, a GitHub identity.
+
 ## v0.1.5
 
 - **A deleted remote is no longer a dropped connection.** `unreachable`
