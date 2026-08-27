@@ -60,5 +60,28 @@ fn main() {
     if archived > 0 {
         print!(", {archived} archived");
     }
+    if !cfg.retired.is_empty() {
+        print!(", {} retired", cfg.retired.len());
+    }
     println!();
+
+    // Notes about trees that are deliberately gone. Printed last and only when
+    // there are any: on a sweep over ssh this is the half of the picture no
+    // amount of looking at the filesystem could give.
+    if !cfg.retired.is_empty() {
+        println!("\n== retired");
+        let mut tombs: Vec<_> = cfg.retired.iter().collect();
+        tombs.sort_by(|a, b| (&b.removed, &a.name).cmp(&(&a.removed, &b.name)));
+        for t in tombs {
+            // A name recorded as deleted that is nonetheless on disk is a
+            // contradiction, and saying so is more use than picking a side.
+            let here = if rows.iter().any(|r| r.name == t.name) { " [ON DISK]" } else { "" };
+            println!(
+                "  {:<24} {:<12}{here} {}",
+                t.name,
+                t.removed.as_deref().unwrap_or("—"),
+                t.note.as_deref().unwrap_or("")
+            );
+        }
+    }
 }

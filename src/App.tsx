@@ -3,7 +3,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { ChevronDown, ChevronRight, GitBranch, RefreshCw, TriangleAlert } from "lucide-react";
 import { cn } from "./lib/cn";
 import { loadPrefs, savePrefs, type Prefs } from "./lib/prefs";
-import { counts, matches, scanRepos, type Filter, type RepoStatus } from "./lib/tauri";
+import { counts, loadConfig, matches, scanRepos, type Filter, type RepoStatus, type Tombstone } from "./lib/tauri";
 import { RepoRow } from "./components/RepoRow";
 
 // Suite rule: the version chip shows only major.minor.patch; any pre-release
@@ -19,9 +19,19 @@ export default function App() {
   const [wasFetched, setWasFetched] = useState(false);
   const [filter, setFilter] = useState<Filter>("all");
   const [prefs, setPrefs] = useState<Prefs>(loadPrefs);
+  const [retired, setRetired] = useState<Tombstone[]>([]);
 
   useEffect(() => {
     getVersion().then(setAppVersion).catch(() => setAppVersion(null));
+  }, []);
+
+  // Tombstones come from the config, not the scan — there is nothing on disk
+  // to scan. A failure here is not worth an error banner: the repo list is the
+  // app, and notes about deleted trees are the footnote.
+  useEffect(() => {
+    loadConfig()
+      .then((c) => setRetired(c.retired ?? []))
+      .catch(() => setRetired([]));
   }, []);
 
   const update = useCallback((fn: (p: Prefs) => Prefs) => {
@@ -75,6 +85,17 @@ export default function App() {
   }, [repos, prefs.seeded, update]);
 
   const collapsed = useMemo(() => new Set(prefs.collapsed), [prefs.collapsed]);
+
+  // Newest decision first: the reason to open this section is usually to
+  // remember what was just cleared out, not to browse the whole history.
+  const tombstones = useMemo(
+    () => [...retired].sort((a, b) => (b.removed ?? "").localeCompare(a.removed ?? "") || a.name.localeCompare(b.name)),
+    [retired],
+  );
+  // A tombstone whose tree is on disk after all. Shown rather than resolved:
+  // either it was re-cloned or the note was written before the deletion, and
+  // which of those it is only the person who wrote it knows.
+  const onDisk = useMemo(() => new Set(repos.map((r) => r.name)), [repos]);
 
   const toggle = (label: string) =>
     update((p) => ({
@@ -216,6 +237,67 @@ export default function App() {
             </section>
           );
         })}
+        {/* Retired: the only section describing repos gtrack cannot scan.
+            Deliberately outside the filter row above, which partitions the
+            scanned set — a category that is by definition not in that set
+            would break the arithmetic those counts promise. It shows under
+            "all" only, since a filter is a request to see what matched. */}
+        {filter === "all" && tombstones.length > 0 && (
+          <section>
+            <button
+              onClick={() => update((p) => ({ ...p, retiredOpen: !p.retiredOpen }))}
+              className="w-full sticky top-0 z-10 bg-panel/95 backdrop-blur px-2 py-1.5 flex items-center gap-2 border-y border-surface/60 hover:bg-surface/60 transition-colors text-left"
+            >
+              {prefs.retiredOpen ? (
+                <ChevronDown size={14} className="text-muted shrink-0" />
+              ) : (
+                <ChevronRight size={14} className="text-muted shrink-0" />
+              )}
+              <span className="text-xs uppercase tracking-wider text-muted font-medium">retired</span>
+              <span className="ml-auto flex items-center gap-1.5 text-[11px] font-mono tabular-nums">
+                <span className="text-muted/60" title={`${tombstones.length} deleted on purpose`}>
+                  {tombstones.length}
+                </span>
+                {tombstones.some((t) => onDisk.has(t.name)) && (
+                  <span
+                    className="px-1.5 rounded bg-alert/25 text-alert font-semibold"
+                    title="Recorded as deleted, but found on disk"
+                  >
+                    {tombstones.filter((t) => onDisk.has(t.name)).length}
+                  </span>
+                )}
+              </span>
+            </button>
+            {prefs.retiredOpen &&
+              tombstones.map((t, i) => {
+                const here = onDisk.has(t.name);
+                return (
+                  <div
+                    key={t.name}
+                    className={cn(
+                      "group/row hover:bg-surfaceHover/50 transition-colors",
+                      here ? "bg-alert/[0.07]" : i % 2 === 1 ? "bg-surface/25" : "",
+                    )}
+                  >
+                    <div className="grid grid-cols-[6px_minmax(7rem,13rem)_minmax(0,1fr)] md:grid-cols-[6px_minmax(9rem,15rem)_8.5rem_minmax(0,1fr)] items-center gap-x-3 pr-2 max-w-[64rem]">
+                      <div className={cn("h-7 w-1.5", here ? "bg-alert" : "bg-muted/25")} />
+                      <span className="text-sm text-muted truncate leading-snug">{t.name}</span>
+                      <span className="hidden md:block font-mono text-[11px] text-muted/60 tabular-nums leading-snug">
+                        {t.removed ?? <span className="text-muted/30">—</span>}
+                      </span>
+                      <span className="text-[11px] text-muted/70 truncate leading-snug" title={t.note ?? undefined}>
+                        {here && (
+                          <span className="mr-1.5 px-1.5 py-px rounded bg-alert/20 text-alert font-mono">on disk</span>
+                        )}
+                        {t.note ?? <span className="text-muted/30">no note</span>}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+          </section>
+        )}
+
         {grouped.length === 0 && !busy && (
           <p className="px-3 py-8 text-[11px] text-muted text-center">
             {filter !== "all" ? `Nothing matches "${filter}".` : "No checkouts found — roots live in gtrack.json."}
@@ -225,6 +307,9 @@ export default function App() {
 
       <footer className="px-2.5 py-1 border-t border-surface/60 text-[11px] text-muted flex items-center gap-3 leading-snug">
         <span>{repos.length} repos</span>
+        {tombstones.length > 0 && (
+          <span className="text-muted/60">{tombstones.length} retired</span>
+        )}
         <span className="hidden sm:inline text-muted/60">read-only</span>
         <span className="ml-auto opacity-60">ndisc suite</span>
       </footer>

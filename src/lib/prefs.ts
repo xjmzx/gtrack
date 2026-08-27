@@ -12,16 +12,20 @@ export interface Prefs {
   collapsed: string[];
   /** Whether the first run has happened; drives the collapse-by-default. */
   seeded: boolean;
+  /** Whether the retired section is open. Closed by default and tracked
+   *  separately from `collapsed`, which holds group labels read from the
+   *  config — a reserved name in that list could collide with a real group. */
+  retiredOpen: boolean;
 }
 
-const DEFAULTS: Prefs = { collapsed: [], seeded: false };
+const DEFAULTS: Prefs = { collapsed: [], seeded: false, retiredOpen: false };
 
 export function loadPrefs(): Prefs {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return { ...DEFAULTS };
     const p = JSON.parse(raw) as Partial<Prefs>;
-    return { collapsed: p.collapsed ?? [], seeded: p.seeded ?? false };
+    return { collapsed: p.collapsed ?? [], seeded: p.seeded ?? false, retiredOpen: p.retiredOpen ?? false };
   } catch {
     return { ...DEFAULTS };
   }

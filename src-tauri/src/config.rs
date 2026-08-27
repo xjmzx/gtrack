@@ -71,6 +71,33 @@ impl Root {
     }
 }
 
+/// A repository deleted on purpose, and what it was.
+///
+/// The only thing gtrack describes that it cannot scan. Every other row is a
+/// measurement of something on disk; this is a note about something that is
+/// deliberately not, and it exists because deletion alone does not answer the
+/// question that made this tool — a dead end removed is cheaper to store but
+/// no easier to identify six months later, when its name still appears in a
+/// deploy note with nothing behind it.
+///
+/// Held here rather than in a file of its own because it is the same kind of
+/// thing as `archived`: a decision that no local evidence could reveal. The
+/// difference is only that one names a tree kept and the other a tree gone.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct Tombstone {
+    /// The directory name it had, which is what a stale reference will say.
+    pub name: String,
+    /// ISO date the tree was removed. Optional: a tombstone written from
+    /// memory is worth more than none, and refusing it would mean the
+    /// backlog of already-deleted repos could never be recorded at all.
+    #[serde(default)]
+    pub removed: Option<String>,
+    /// What it was, and where anything worth keeping survives. The whole
+    /// value of the entry is in this line.
+    #[serde(default)]
+    pub note: Option<String>,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Config {
     #[serde(default = "default_roots")]
@@ -88,6 +115,14 @@ pub struct Config {
     /// says the true thing — that this is a decision, not a measurement.
     #[serde(default)]
     pub archived: Vec<String>,
+    /// Repositories deleted on purpose, kept as notes rather than trees.
+    ///
+    /// Nothing here is ever scanned — by construction, the tree is gone. A
+    /// name that turns up on disk anyway is a contradiction worth showing
+    /// rather than resolving silently: either it was re-cloned, or the
+    /// tombstone was written before the deletion happened.
+    #[serde(default)]
+    pub retired: Vec<Tombstone>,
 }
 
 fn default_roots() -> Vec<Root> {
@@ -132,6 +167,7 @@ impl Default for Config {
             roots: default_roots(),
             groups: default_groups(),
             archived: Vec::new(),
+            retired: Vec::new(),
         }
     }
 }
@@ -140,6 +176,12 @@ impl Config {
     /// Whether this repo has been declared retired.
     pub fn is_archived(&self, repo_name: &str) -> bool {
         self.archived.iter().any(|a| a == repo_name)
+    }
+
+    /// The tombstone for a name, if one was left. Used to mark the
+    /// contradiction when a supposedly deleted tree is found on disk.
+    pub fn tombstone(&self, repo_name: &str) -> Option<&Tombstone> {
+        self.retired.iter().find(|t| t.name == repo_name)
     }
 
     /// Group label for a repo directory name, or `None` to fall back to its root.
@@ -294,8 +336,35 @@ mod tests {
 
     #[test]
     fn a_config_without_the_field_still_parses() {
-        // Every config written before `archived` existed.
+        // Every config written before `archived` and `retired` existed.
         let c: Config = serde_json::from_str(r#"{"roots":[],"groups":[]}"#).unwrap();
         assert!(c.archived.is_empty());
+        assert!(c.retired.is_empty());
+    }
+
+    #[test]
+    fn a_tombstone_needs_only_a_name() {
+        // A repo deleted before this field existed can still be recorded from
+        // memory; demanding a date would mean the backlog stays unwritten.
+        let c: Config =
+            serde_json::from_str(r#"{"roots":[],"groups":[],"retired":[{"name":"sonic.fizx.uk"}]}"#).unwrap();
+        assert_eq!(c.retired.len(), 1);
+        assert_eq!(c.retired[0].removed, None);
+        assert_eq!(c.retired[0].note, None);
+        assert!(c.tombstone("sonic.fizx.uk").is_some());
+        assert!(c.tombstone("gtrack").is_none());
+    }
+
+    #[test]
+    fn a_full_tombstone_round_trips() {
+        let mut c = Config::default();
+        c.retired.push(Tombstone {
+            name: "svelte-static".into(),
+            removed: Some("2026-08-27".into()),
+            note: Some("Scaffold; nothing unique.".into()),
+        });
+        let back: Config = serde_json::from_str(&serde_json::to_string(&c).unwrap()).unwrap();
+        assert_eq!(back.retired[0].name, "svelte-static");
+        assert_eq!(back.retired[0].removed.as_deref(), Some("2026-08-27"));
     }
 }

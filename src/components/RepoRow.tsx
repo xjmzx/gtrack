@@ -23,7 +23,17 @@ function Version({ r }: { r: RepoStatus }) {
   );
 }
 
-const ALERT_FLAGS = new Set(["stale lock", "no upstream", "unreachable", "version mismatch"]);
+const ALERT_FLAGS = new Set(["stale lock", "no upstream", "orphan", "unreachable", "version mismatch"]);
+
+/** Hints for the flags that are faults. `STATE_FLAGS` below carries its own;
+ *  these are red either way and only need to say what was actually seen —
+ *  particularly `orphan`, which reports an observation, not a conclusion. */
+const ALERT_HINTS: Record<string, string> = {
+  orphan:
+    "The remote answered: no such repository — deleted, renamed, or not visible to the account this machine authenticates as. Drop the remote to keep it as an archive, or delete the tree and leave a tombstone in gtrack.json",
+  unreachable:
+    "Fetch failed on network, DNS or credentials — a condition of the moment, not a fact about the remote",
+};
 
 /** Flags that describe how a repository is set up rather than reporting a
  *  fault, each with its own tone and none of them red.
@@ -51,7 +61,7 @@ function Flag({ text }: { text: string }) {
   return (
     <span
       className={cn("px-1.5 py-px rounded text-[11px] font-mono shrink-0 leading-snug", tone)}
-      title={state?.hint}
+      title={state?.hint ?? ALERT_HINTS[text]}
     >
       {text}
     </span>

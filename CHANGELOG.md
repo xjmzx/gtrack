@@ -1,5 +1,42 @@
 # Changelog
 
+## v0.1.5
+
+- **A deleted remote is no longer a dropped connection.** `unreachable`
+  carried both, and only one of them can be waited out: a remote answering *no
+  such repository* is a durable fact — deleted, renamed, or belonging to an
+  account this machine does not authenticate as — where DNS, a refused
+  connection or an unloaded key is a condition of the moment. Sharing one flag
+  between them hid a real case. The one checkout here whose remote had been
+  deleted read as `1 behind`: indistinguishable, on a local scan, from a repo
+  that simply owed a pull. It now reads `orphan`. The classification is
+  conservative by construction — `unreachable` stays the default and a failure
+  is promoted only on a positive match, because a blip mislabelled `orphan` is
+  the confident wrong answer this tool exists not to give. The generic
+  `could not read from remote repository` that git appends is deliberately not
+  a signal: it follows a refused key as readily as a missing repo.
+- **`orphan` is unsettled on purpose,** and has exactly two exits. Drop the
+  remote and it becomes a derived `archive` — kept deliberately, contents
+  living nowhere else. Or delete the tree and leave a tombstone. It stays red
+  until one of those is chosen, because what is missing is the decision, not a
+  fix.
+- **Tombstones: a `retired` list in `gtrack.json`,** beside `archived`. Name,
+  optional date, and one line saying what the repo was and where anything worth
+  keeping survives. This is the only thing gtrack describes that it cannot
+  scan, and the reason it exists is that deletion alone does not answer the
+  question the tool was built for — a dead end removed is cheaper to store but
+  no easier to identify six months later, when its name still turns up in a
+  deploy note with nothing behind it. A few hundred bytes against a repository.
+  The date is optional so an already-deleted backlog can still be recorded;
+  a tombstone written from memory beats none.
+- **A tombstone whose tree is on disk is shown, not resolved.** Either it was
+  re-cloned or the note was written ahead of the deletion, and only the person
+  who wrote it knows which. The section sits outside the filter row, which
+  partitions the scanned set — a category that is by definition not in that set
+  would break the arithmetic those counts promise. The headless scanner prints
+  the same list, which on a sweep over ssh is the half of the picture no amount
+  of looking at the filesystem could give.
+
 ## v0.1.4
 
 - **Archives can be declared, not only derived.** A repository with no remote

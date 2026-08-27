@@ -24,6 +24,10 @@ already cost something:
   had been blocking pulls for six weeks.
 - **Un-fetched refs report pushed commits as unpushed.** Two people
   independently investigated phantom work in the same afternoon.
+- **A checkout whose remote had been deleted read as `1 behind`** — on a local
+  scan, indistinguishable from a repo that simply owed a pull. It took reading
+  two repositories' histories to establish what it had been and whether
+  anything in it lived nowhere else.
 
 None of those were hard to fix. They were hard to *notice*.
 
@@ -38,6 +42,23 @@ ahead/behind/dirty counts, and any findings worth acting on.
 and says so. Ahead/behind become authoritative only after an explicit **Fetch**,
 which fetches each repo's *tracked* remote — never `--all`, which fails outright
 if any auxiliary remote is broken and turns healthy repos into false alarms.
+
+**A failed fetch says which kind it was.** `unreachable` is a condition of the
+moment — DNS, a refused connection, a key not loaded. `orphan` is a remote
+answering *no such repository*: deleted, renamed, or owned by an account this
+machine does not authenticate as. The split is conservative, promoting only on
+a positive match, because a blip mislabelled `orphan` would be exactly the
+confident wrong answer this tool exists to prevent. An `orphan` has two exits,
+and stays red until one is taken: drop the remote and it becomes an `archive`
+kept on purpose, or delete the tree and leave a tombstone.
+
+**Retired repositories are remembered without being kept.** `gtrack.json` holds
+a `retired` list — a name, an optional date, and one line saying what the repo
+was and where anything worth keeping survives. It is the only thing gtrack
+describes that it cannot scan, and it is there because deleting a dead end is
+cheaper to store but no easier to identify later, when its name still turns up
+in a deploy note with nothing behind it. A name recorded as deleted that turns
+up on disk anyway is flagged rather than quietly resolved.
 
 ## Read-only, by design
 

@@ -250,6 +250,46 @@ fn rootedness(remote_kind: RemoteKind, has_upstream: bool) -> Option<&'static st
     }
 }
 
+/// Which of two very different things a failed fetch was.
+///
+/// `unreachable` used to carry both, and only one of them can be waited out. A
+/// remote that answers *no such repository* is a durable fact about the world:
+/// it was deleted, renamed, or belongs to an account this machine does not
+/// authenticate as. Everything else — DNS, a refused connection, a key not
+/// loaded — is a condition of the moment that looks different in an hour.
+/// Sharing one flag between them is the mistake `rootedness` above exists to
+/// undo, and it hid a real case: the one checkout here whose remote had been
+/// deleted read as `1 behind`, indistinguishable from a repo owing a pull.
+///
+/// Conservative by construction. `unreachable` is the default and a failure is
+/// promoted only on a positive match, because a blip mislabelled `orphan` is
+/// the confident wrong answer this tool exists not to give, where an orphan
+/// left as `unreachable` is merely the status quo. The generic
+/// `could not read from remote repository` that git appends is deliberately
+/// not a signal — it follows a refused key just as readily as a missing repo.
+///
+/// `orphan` is unsettled on purpose, and there are exactly two ways out. Drop
+/// the remote — `git remote remove origin` — and it becomes a derived
+/// `archive`: kept deliberately, contents living nowhere else. Or delete the
+/// tree and leave a tombstone in `gtrack.json`. It stays red until one of them
+/// happens, because the missing thing is the decision.
+fn fetch_failure(stderr: &str) -> &'static str {
+    // Lower-cased once: GitHub capitalises "Repository", GitLab says "project",
+    // and the wording drifts between git versions.
+    let s = stderr.to_ascii_lowercase();
+    const GONE: &[&str] = &[
+        "repository not found",                              // GitHub
+        "repository does not exist",                         // gitea, others
+        "the project you were looking for could not be found", // GitLab
+        "does not appear to be a git repository",             // path gone entirely
+    ];
+    if GONE.iter().any(|needle| s.contains(needle)) {
+        "orphan"
+    } else {
+        "unreachable"
+    }
+}
+
 fn inspect(path: &Path, root_label: &str, cfg: &Config, fetch: bool) -> RepoStatus {
     let name = path.file_name().and_then(|s| s.to_str()).unwrap_or("?").to_string();
     let group = cfg.group_for(&name).unwrap_or(root_label).to_string();
@@ -320,8 +360,8 @@ fn inspect(path: &Path, root_label: &str, cfg: &Config, fetch: bool) -> RepoStat
     } else if let Some(f) = rootedness(remote_kind, upstream.is_some()) {
         flags.push(f.into());
     }
-    if fetch_error.is_some() {
-        flags.push("unreachable".into());
+    if let Some(msg) = fetch_error.as_deref() {
+        flags.push(fetch_failure(msg).into());
     }
     if remote_kind == RemoteKind::Https {
         flags.push("https remote".into());
@@ -398,6 +438,35 @@ mod tests {
         // Rooted: no flag either way.
         assert_eq!(rootedness(RemoteKind::SshAlias, true), None);
         assert_eq!(rootedness(RemoteKind::Ssh, true), None);
+    }
+
+    #[test]
+    fn a_deleted_remote_is_not_a_dropped_connection() {
+        // The exact stderr from the case that prompted this: an SSH alias that
+        // authenticated fine against an owner whose repo had been deleted.
+        assert_eq!(
+            fetch_failure(
+                "ERROR: Repository not found.\nfatal: Could not read from remote repository.\n\n\
+                 Please make sure you have the correct access rights\nand the repository exists."
+            ),
+            "orphan"
+        );
+        assert_eq!(fetch_failure("remote: The project you were looking for could not be found."), "orphan");
+        assert_eq!(fetch_failure("fatal: '/srv/git/x.git' does not appear to be a git repository"), "orphan");
+    }
+
+    #[test]
+    fn a_failure_that_will_look_different_in_an_hour_stays_unreachable() {
+        assert_eq!(fetch_failure("ssh: Could not resolve hostname github.com"), "unreachable");
+        assert_eq!(fetch_failure("ssh: connect to host github.com port 22: Operation timed out"), "unreachable");
+        // A refused key carries the same generic second line as a missing repo.
+        // Matching on that line would turn every unloaded agent into an orphan.
+        assert_eq!(
+            fetch_failure("git@github.com: Permission denied (publickey).\nfatal: Could not read from remote repository."),
+            "unreachable"
+        );
+        // Nothing recognised at all: the conservative direction, not a guess.
+        assert_eq!(fetch_failure("fetch failed"), "unreachable");
     }
 
     #[test]

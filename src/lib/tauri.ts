@@ -53,6 +53,21 @@ export interface Root {
   label: string | null;
 }
 
+/** A repository deleted on purpose, and what it was.
+ *
+ *  The only thing gtrack describes that it cannot scan — every other row
+ *  measures something on disk. It exists because deletion alone does not
+ *  answer the question that made this tool: a dead end removed is cheaper to
+ *  store but no easier to identify later, when its name still turns up in a
+ *  deploy note with nothing behind it. */
+export interface Tombstone {
+  name: string;
+  /** ISO date. Optional, so an already-deleted backlog can still be written. */
+  removed: string | null;
+  /** What it was, and where anything worth keeping survives. */
+  note: string | null;
+}
+
 export interface Config {
   roots: Root[];
   groups: Group[];
@@ -60,6 +75,8 @@ export interface Config {
    *  archive; this is the other half — one whose remote still exists but has
    *  been retired, which nothing on disk could reveal. */
   archived: string[];
+  /** Repos deleted on purpose, kept as notes rather than trees. */
+  retired: Tombstone[];
 }
 
 export const loadConfig = () => invoke<Config>("load_config");
@@ -88,6 +105,11 @@ export type Bucket = "clean" | "dirty" | "config" | "archive" | "https";
 const CONFIG_FLAGS = new Set([
   "stale lock",
   "no upstream",
+  // Both halves of what used to be one flag. `orphan` is red for a different
+  // reason than the others: nothing is broken, a decision is missing — either
+  // drop the remote and keep it as an archive, or delete it and leave a
+  // tombstone. It stays red until one of those is made, which is the point.
+  "orphan",
   "unreachable",
   "version mismatch",
 ]);
