@@ -94,14 +94,14 @@ export const scanRepos = (fetch: boolean) => invoke<RepoStatus[]>("scan_repos", 
  *  Derived from the flags Rust already computed, deliberately. Recomputing the
  *  same judgement in TypeScript is what let a serialisation bug colour broken
  *  repos green while their flags said otherwise. */
-export type Bucket = "clean" | "dirty" | "config" | "archive" | "https";
+export type Bucket = "clean" | "dirty" | "config" | "archive" | "unpinned";
 
 /** Things that are actually broken, and stay red.
  *
- *  `https remote` is deliberately not among them. It is a house preference —
- *  every remote on an SSH alias, so GitHub actions run as the right account —
- *  not a fault: an https remote fetches perfectly well and most of them push
- *  too. Red made a tidy machine read as an emergency over a naming choice. */
+ *  `unpinned` is deliberately not among them. A remote that does not name the
+ *  account it authenticates as fetches perfectly well and usually pushes fine
+ *  too — it only bites on a machine with several identities, and then only on
+ *  a write. Red made a tidy machine read as an emergency over a URL form. */
 const CONFIG_FLAGS = new Set([
   "stale lock",
   "no upstream",
@@ -115,7 +115,7 @@ const CONFIG_FLAGS = new Set([
 ]);
 
 export function bucket(r: RepoStatus): Bucket {
-  // Config first: an archive or an https remote with a stale lock or
+  // Config first: an archive or an unpinned remote with a stale lock or
   // disagreeing version files still has a fault worth the red. Only otherwise
   // sound ones reach their own bucket — those flags describe how a repo is
   // set up, not that something is wrong with it.
@@ -123,11 +123,11 @@ export function bucket(r: RepoStatus): Bucket {
   if (r.flags.includes("archive")) return "archive";
   // Above `dirty`, as it was when this counted as config: a remote protocol
   // persists until someone changes it, where uncommitted work turns over daily.
-  if (r.flags.includes("https remote")) return "https";
+  if (r.flags.includes("unpinned")) return "unpinned";
   return r.flags.length > 0 ? "dirty" : "clean";
 }
 
-export type Severity = "alert" | "warn" | "ok" | "archive" | "https";
+export type Severity = "alert" | "warn" | "ok" | "archive" | "unpinned";
 
 export function severity(r: RepoStatus): Severity {
   const b = bucket(r);
@@ -138,21 +138,24 @@ export function severity(r: RepoStatus): Severity {
       return "warn";
     case "archive":
       return "archive";
-    case "https":
-      return "https";
+    case "unpinned":
+      return "unpinned";
     default:
       return "ok";
   }
 }
 
-export type Filter = "all" | "clean" | "dirty" | "https" | "archive";
+export type Filter = "all" | "clean" | "dirty" | "unpinned" | "archive";
 
 export function matches(r: RepoStatus, f: Filter): boolean {
   switch (f) {
     case "all":
       return true;
-    case "https":
-      return r.remoteKind === "https";
+    case "unpinned":
+      // The flag, not the remote kind: `unpinned` covers https *and* bare
+      // git@github.com, and duplicating that judgement here is what let a
+      // serialisation bug disagree with the flags once already.
+      return r.flags.includes("unpinned");
     case "archive":
       // The flag, not the bucket: an archive that also has a fault sits in
       // `config`, and hiding it from its own lens would be the wrong answer.
@@ -167,11 +170,11 @@ export interface Counts {
   dirty: number;
   config: number;
   archive: number;
-  https: number;
+  unpinned: number;
 }
 
 export function counts(rows: RepoStatus[]): Counts {
-  const c: Counts = { clean: 0, dirty: 0, config: 0, archive: 0, https: 0 };
+  const c: Counts = { clean: 0, dirty: 0, config: 0, archive: 0, unpinned: 0 };
   for (const r of rows) c[bucket(r)]++;
   return c;
 }

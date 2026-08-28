@@ -57,6 +57,12 @@ hesitate to run, which defeats the point of it.
 - **Shelling out to `git` is deliberate**, not laziness. Fetching uses the
   machine's own SSH config including per-account host aliases; libgit2 would
   need separate credential plumbing and would get it subtly wrong.
+- **Flag the property, not the protocol.** `unpinned` covers `https://` *and*
+  bare `git@github.com:` because both resolve the account at push time — one
+  through the credential helper, one through ssh-agent's key order. It was
+  `https remote` for a while and missed the second half entirely, on a machine
+  where every site repo was the second half. If a new remote form appears, ask
+  whether it names the identity, not what scheme it uses.
 - **SSH alias names are per-machine.** `github-xjmzx` on one box is `xjmzx` on
   another, so remote classification checks the *shape* of a URL, never a
   specific alias name.

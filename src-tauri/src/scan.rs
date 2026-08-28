@@ -105,6 +105,31 @@ fn git(dir: &Path, args: &[&str]) -> Option<String> {
     Some(String::from_utf8_lossy(&out.stdout).trim().to_string())
 }
 
+/// Whether a remote pins the account it will authenticate as.
+///
+/// This, not the protocol, is the property worth flagging. An `https://`
+/// remote resolves through whatever the credential helper hands over, and a
+/// bare `git@github.com:` resolves through whichever key ssh-agent happens to
+/// offer first — with several accounts on one machine, both can push as the
+/// wrong identity, and neither says so until the commit is on the wrong
+/// profile. A host alias names an `IdentityFile`, so it can only ever be one
+/// account.
+///
+/// The flag used to be `https remote` and matched the protocol alone, which
+/// left the bare-SSH half of the same hazard invisible. Its own tooltip had
+/// always described pinning rather than protocol — the name and the match arm
+/// were what lagged.
+fn pins_account(kind: RemoteKind) -> bool {
+    match kind {
+        RemoteKind::SshAlias => true,
+        // `None` has nothing to authenticate against; a repo with no remote is
+        // an archive, and reporting it as unpinned would be noise on a state
+        // that is already saying the true thing.
+        RemoteKind::None => true,
+        RemoteKind::Https | RemoteKind::Ssh => false,
+    }
+}
+
 fn classify_remote(url: &str) -> RemoteKind {
     if url.starts_with("https://") || url.starts_with("http://") {
         RemoteKind::Https
@@ -363,8 +388,8 @@ fn inspect(path: &Path, root_label: &str, cfg: &Config, fetch: bool) -> RepoStat
     if let Some(msg) = fetch_error.as_deref() {
         flags.push(fetch_failure(msg).into());
     }
-    if remote_kind == RemoteKind::Https {
-        flags.push("https remote".into());
+    if !pins_account(remote_kind) {
+        flags.push("unpinned".into());
     }
     if !versions.agree {
         flags.push("version mismatch".into());
@@ -426,6 +451,18 @@ mod tests {
         assert_eq!(classify_remote("git@github.com:x/y.git"), RemoteKind::Ssh);
         assert_eq!(classify_remote("github-xjmzx:xjmzx/y.git"), RemoteKind::SshAlias);
         assert_eq!(classify_remote("git@adjmx:adjmx/y.git"), RemoteKind::SshAlias);
+    }
+
+    #[test]
+    fn both_halves_of_the_unpinned_hazard_are_caught() {
+        // The protocol differs; the failure does not. Either can push as the
+        // wrong account on a machine with more than one.
+        assert!(!pins_account(RemoteKind::Https));
+        assert!(!pins_account(RemoteKind::Ssh));
+        // An alias names an IdentityFile, so it can only be one account.
+        assert!(pins_account(RemoteKind::SshAlias));
+        // No remote at all: already reported as `archive`, nothing to pin.
+        assert!(pins_account(RemoteKind::None));
     }
 
     #[test]

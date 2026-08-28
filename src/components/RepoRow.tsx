@@ -38,18 +38,17 @@ const ALERT_HINTS: Record<string, string> = {
 /** Flags that describe how a repository is set up rather than reporting a
  *  fault, each with its own tone and none of them red.
  *
- *  `archive` is grey: where the repo lives, nothing wrong with it. `https
- *  remote` takes the mauve of `track` in the wordmark — a house preference,
- *  visible but not shouted, since an https remote fetches and usually pushes
- *  perfectly well. */
+ *  `archive` is grey: where the repo lives, nothing wrong with it. `unpinned`
+ *  takes the mauve of `track` in the wordmark — visible but not shouted, since
+ *  such a remote fetches and usually pushes perfectly well. */
 const STATE_FLAGS: Record<string, { tone: string; hint: string }> = {
   archive: {
     tone: "bg-muted/15 text-muted",
     hint: "No remote — kept deliberately as a local-only archive",
   },
-  "https remote": {
+  unpinned: {
     tone: "bg-mauve/15 text-mauve",
-    hint: "Remote is https — prefer an SSH alias so GitHub actions run as the right account",
+    hint: "Remote does not name the account it authenticates as — https resolves through the credential helper, bare git@github.com through whichever key ssh-agent offers first. Use a host alias so pushes land on the right identity",
   },
 };
 
@@ -83,7 +82,7 @@ export function RepoRow({ r, zebra }: { r: RepoStatus; zebra: boolean }) {
           ? "bg-alert/[0.07]"
           : sev === "warn"
             ? "bg-warn/[0.05]"
-            : sev === "https"
+            : sev === "unpinned"
               ? "bg-mauve/[0.05]"
               : zebra
                 ? "bg-surface/25"
@@ -109,7 +108,7 @@ export function RepoRow({ r, zebra }: { r: RepoStatus; zebra: boolean }) {
               ? "bg-warn"
               : sev === "archive"
                 ? "bg-muted/40"
-                : sev === "https"
+                : sev === "unpinned"
                   ? "bg-mauve/60"
                   : "bg-ok/50",
         )}

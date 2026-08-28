@@ -140,7 +140,7 @@ export default function App() {
                 ["all", repos.length, "text-fg", "Everything"],
                 ["clean", total.clean, "text-ok", "Nothing to do"],
                 ["dirty", total.dirty, "text-warn", "Work in progress — uncommitted, unpushed or behind"],
-                ["https", repos.filter((r) => r.remoteKind === "https").length, "text-mauve", "Remotes on https — prefer an SSH alias so GitHub actions run as the right account"],
+                ["unpinned", repos.filter((r) => r.flags.includes("unpinned")).length, "text-mauve", "Remote does not name the account it authenticates as — https, or a bare git@github.com. Use a host alias so pushes land on the right identity"],
                 ["archive", total.archive, "text-muted", "No remote — kept deliberately as a local-only archive"],
               ] as const
             ).map(([key, n, tone, hint]) => (
@@ -220,8 +220,8 @@ export default function App() {
                 <span className="ml-auto flex items-center gap-1.5 text-[11px] font-mono tabular-nums">
                   {c.clean > 0 && <span className="text-ok/70" title={`${c.clean} clean`}>{c.clean}</span>}
                   {c.dirty > 0 && <span className="text-warn" title={`${c.dirty} with local work`}>{c.dirty}</span>}
-                  {c.https > 0 && (
-                    <span className="text-mauve/80" title={`${c.https} on an https remote`}>{c.https}</span>
+                  {c.unpinned > 0 && (
+                    <span className="text-mauve/80" title={`${c.unpinned} on an unpinned remote`}>{c.unpinned}</span>
                   )}
                   {c.archive > 0 && (
                     <span className="text-muted/60" title={`${c.archive} local-only archive`}>{c.archive}</span>

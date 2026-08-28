@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.1.7
+
+- **`https remote` becomes `unpinned`, and now catches the other half of the
+  same hazard.** The flag matched the protocol, but the protocol was never the
+  problem: an `https://` remote resolves through whatever the credential helper
+  hands over, and a bare `git@github.com:` resolves through whichever key
+  ssh-agent offers first. On a machine with several GitHub identities both can
+  push as the wrong account, and neither says so until the commit is sitting on
+  the wrong profile. A host alias names an `IdentityFile` and can only ever be
+  one account, which is the actual property worth reporting.
+- **The tooltip had been right all along.** It already read "prefer an SSH
+  alias so GitHub actions run as the right account" — about pinning, not about
+  https. The flag name and the match arm were what lagged, which is why 17
+  bare-SSH remotes sat unflagged on one machine while the tool reported it
+  clean.
+- **`pins_account` replaces the protocol comparison** and treats `None` as
+  pinned: a repo with no remote is already saying the true thing as `archive`,
+  and adding `unpinned` on top would be noise on a settled state.
+- **The filter counts the flag, not the remote kind.** The chip previously
+  counted `remoteKind === "https"` while the filter matched on something else,
+  so widening the flag would have let the chip advertise a number the filter
+  then contradicted.
+
 ## v0.1.6
 
 - **One root convention, and the defaults now hold it.** The built-in roots
