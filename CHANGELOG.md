@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.1.8
+
+- **`clean` is a chip like everything else in its column.** It was bare text
+  while every other flag was a pill, so the flags column shifted horizontally
+  between rows that had findings and rows that did not — the geometry was the
+  inconsistency, not the colour. It now renders through the same `Flag`
+  component, which also gives it the tooltip it never had.
+- **It keeps the quietest tone in the set** rather than taking equal weight.
+  `clean` is the absence of a finding and 46 of 59 rows say it here; a
+  full-strength chip on all of them would compete with the rows that actually
+  want looking at. Same reasoning that keeps `archive` out of the findings
+  count and `unpinned` out of red — a tidy machine should not read as a busy
+  one.
+
 ## v0.1.7
 
 - **`https remote` becomes `unpinned`, and now catches the other half of the

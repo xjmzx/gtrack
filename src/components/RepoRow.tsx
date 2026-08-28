@@ -46,6 +46,15 @@ const STATE_FLAGS: Record<string, { tone: string; hint: string }> = {
     tone: "bg-muted/15 text-muted",
     hint: "No remote — kept deliberately as a local-only archive",
   },
+  // `clean` is the absence of findings, not a finding, so it takes the chip's
+  // geometry but the quietest tone in the set. Same shape as its neighbours —
+  // the column no longer shifts between chip rows and text rows — while still
+  // receding, because 46 of 59 rows say this and the eye needs to skip them to
+  // land on the 13 that do not.
+  clean: {
+    tone: "bg-ok/10 text-ok/50",
+    hint: "Nothing to do — no findings on this repo",
+  },
   unpinned: {
     tone: "bg-mauve/15 text-mauve",
     hint: "Remote does not name the account it authenticates as — https resolves through the credential helper, bare git@github.com through whichever key ssh-agent offers first. Use a host alias so pushes land on the right identity",
@@ -140,7 +149,7 @@ export function RepoRow({ r, zebra }: { r: RepoStatus; zebra: boolean }) {
 
       <div className="hidden md:flex items-center gap-1.5 min-w-0 overflow-hidden">
         {r.flags.length === 0 ? (
-          <span className="text-[11px] font-mono text-ok/40">clean</span>
+          <Flag text="clean" />
         ) : (
           r.flags.map((f) => <Flag key={f} text={f} />)
         )}
