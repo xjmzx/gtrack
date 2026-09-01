@@ -178,3 +178,27 @@ export function counts(rows: RepoStatus[]): Counts {
   for (const r of rows) c[bucket(r)]++;
   return c;
 }
+
+/** The worst state present in a set of repos — the group indicator's colour.
+ *
+ *  Rolls up `severity` rather than re-reading flags. Same reason `bucket` is
+ *  derived from what Rust computed: one judgement made in one place, so a
+ *  closed group can never claim a colour the rows inside it disagree with.
+ *
+ *  The rank is by what the colour should make you do. `alert` is a fault and
+ *  `warn` is work that can still be lost, so both outrank `unpinned` — a
+ *  durable property of a remote that bites only on a write, and never on the
+ *  machine that has one identity. `archive` sits directly above `ok`: it is
+ *  settled, not pending, and takes grey over green only because a group
+ *  holding one is not in fact all clean. It is the one tone here that asks for
+ *  nothing, which is why it must not outrank the three that do.
+ *
+ *  An empty set rolls up to `ok`. Nothing renders it — a group exists because
+ *  it has rows — but the alternative is a partial function for no gain. */
+const SEVERITY_RANK: readonly Severity[] = ["alert", "warn", "unpinned", "archive", "ok"];
+
+export function groupSeverity(rows: RepoStatus[]): Severity {
+  let worst = SEVERITY_RANK.length - 1;
+  for (const r of rows) worst = Math.min(worst, SEVERITY_RANK.indexOf(severity(r)));
+  return SEVERITY_RANK[worst];
+}

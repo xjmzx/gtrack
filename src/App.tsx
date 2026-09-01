@@ -3,12 +3,60 @@ import { getVersion } from "@tauri-apps/api/app";
 import { ChevronDown, ChevronRight, GitBranch, RefreshCw, TriangleAlert } from "lucide-react";
 import { cn } from "./lib/cn";
 import { loadPrefs, savePrefs, type Prefs } from "./lib/prefs";
-import { counts, loadConfig, matches, scanRepos, type Filter, type RepoStatus, type Tombstone } from "./lib/tauri";
+import {
+  counts,
+  groupSeverity,
+  loadConfig,
+  matches,
+  scanRepos,
+  type Filter,
+  type RepoStatus,
+  type Severity,
+  type Tombstone,
+} from "./lib/tauri";
 import { RepoRow } from "./components/RepoRow";
 
 // Suite rule: the version chip shows only major.minor.patch; any pre-release
 // suffix drops to the tooltip so the chip keeps a fixed width.
 const shortVersion = (v: string) => v.split(/[-+]/)[0];
+
+/** Tones and hints for the group indicator.
+ *
+ *  Fuller alphas than the row's severity bar, which is 28px tall and can
+ *  afford to sit at half opacity. At 7px the same alpha reads as grey on a
+ *  dark panel — and grey is the one tone here that already means something
+ *  else, so the colours have to hold their own at this size. */
+const DOT: Record<Severity, { tone: string; hint: string }> = {
+  alert: {
+    tone: "bg-alert",
+    hint: "Something here is broken — a stale lock, a missing upstream, an unreachable or orphaned remote, or version files that disagree",
+  },
+  warn: { tone: "bg-warn", hint: "Local work here — uncommitted, unpushed or behind" },
+  unpinned: {
+    tone: "bg-mauve",
+    hint: "A remote here does not name the account it authenticates as",
+  },
+  archive: { tone: "bg-muted/50", hint: "Nothing to do — but this group holds a local-only archive" },
+  ok: { tone: "bg-ok", hint: "Everything here is clean" },
+};
+
+/** The state of a group, readable while it is closed.
+ *
+ *  Sits before the chevron rather than beside the counts, so the answer to
+ *  "does this need opening?" is next to the control that opens it. The counts
+ *  to the right still carry the breakdown; this is only the worst of them,
+ *  which is what a collapsed list can be scanned for. */
+function GroupDot({ sev, hint }: { sev: Severity; hint?: string }) {
+  const label = hint ?? DOT[sev].hint;
+  return (
+    <span
+      className={cn("h-[7px] w-[7px] rounded-full shrink-0", DOT[sev].tone)}
+      title={label}
+      aria-label={label}
+      role="img"
+    />
+  );
+}
 
 export default function App() {
   const [repos, setRepos] = useState<RepoStatus[]>([]);
@@ -96,6 +144,7 @@ export default function App() {
   // either it was re-cloned or the note was written before the deletion, and
   // which of those it is only the person who wrote it knows.
   const onDisk = useMemo(() => new Set(repos.map((r) => r.name)), [repos]);
+  const contradicted = useMemo(() => tombstones.filter((t) => onDisk.has(t.name)).length, [tombstones, onDisk]);
 
   const toggle = (label: string) =>
     update((p) => ({
@@ -207,11 +256,14 @@ export default function App() {
                 onClick={() => toggle(label)}
                 className="w-full sticky top-0 z-10 bg-panel/95 backdrop-blur px-2 py-1.5 flex items-center gap-2 border-y border-surface/60 hover:bg-surface/60 transition-colors text-left"
               >
-                {isOpen ? (
-                  <ChevronDown size={14} className="text-muted shrink-0" />
-                ) : (
-                  <ChevronRight size={14} className="text-muted shrink-0" />
-                )}
+                <span className="flex items-center gap-1.5 shrink-0">
+                  <GroupDot sev={groupSeverity(rows)} />
+                  {isOpen ? (
+                    <ChevronDown size={14} className="text-muted shrink-0" />
+                  ) : (
+                    <ChevronRight size={14} className="text-muted shrink-0" />
+                  )}
+                </span>
                 <span className="text-xs uppercase tracking-wider text-fg/80 font-medium">{label}</span>
                 {/* Collapsing hides detail, never signal: a closed group still
                     says how much inside it needs looking at. */}
@@ -248,22 +300,38 @@ export default function App() {
               onClick={() => update((p) => ({ ...p, retiredOpen: !p.retiredOpen }))}
               className="w-full sticky top-0 z-10 bg-panel/95 backdrop-blur px-2 py-1.5 flex items-center gap-2 border-y border-surface/60 hover:bg-surface/60 transition-colors text-left"
             >
-              {prefs.retiredOpen ? (
-                <ChevronDown size={14} className="text-muted shrink-0" />
-              ) : (
-                <ChevronRight size={14} className="text-muted shrink-0" />
-              )}
+              {/* Not a scanned group, but it carries the same control, so it
+                  takes the same indicator — without one the chevrons below
+                  would sit a dot's width off the column above. Grey by
+                  default: a tombstone is the settled end of a decision. Red
+                  only for the contradiction, which is the one thing here that
+                  wants looking at. */}
+              <span className="flex items-center gap-1.5 shrink-0">
+                <GroupDot
+                  sev={contradicted > 0 ? "alert" : "archive"}
+                  hint={
+                    contradicted > 0
+                      ? "Recorded as deleted, but found on disk"
+                      : "Deleted on purpose — notes, not trees"
+                  }
+                />
+                {prefs.retiredOpen ? (
+                  <ChevronDown size={14} className="text-muted shrink-0" />
+                ) : (
+                  <ChevronRight size={14} className="text-muted shrink-0" />
+                )}
+              </span>
               <span className="text-xs uppercase tracking-wider text-muted font-medium">retired</span>
               <span className="ml-auto flex items-center gap-1.5 text-[11px] font-mono tabular-nums">
                 <span className="text-muted/60" title={`${tombstones.length} deleted on purpose`}>
                   {tombstones.length}
                 </span>
-                {tombstones.some((t) => onDisk.has(t.name)) && (
+                {contradicted > 0 && (
                   <span
                     className="px-1.5 rounded bg-alert/25 text-alert font-semibold"
                     title="Recorded as deleted, but found on disk"
                   >
-                    {tombstones.filter((t) => onDisk.has(t.name)).length}
+                    {contradicted}
                   </span>
                 )}
               </span>

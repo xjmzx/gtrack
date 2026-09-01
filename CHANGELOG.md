@@ -1,5 +1,38 @@
 # Changelog
 
+## v0.1.9
+
+- **A collapsed group now says how bad, not just how much.** Everything opens
+  collapsed by design, so the headers are the whole first screen — and they
+  carried a breakdown of counts but nothing that ranked them. Finding the one
+  repo of 53 that wants attention meant reading seven rows of small tabular
+  numbers and knowing which colour each column was. A dot before each chevron
+  carries the worst state in the group, which is the one thing a closed list
+  can be scanned for. On this machine that is five groups green, one grey and
+  one red, and the red is the answer.
+- **It sits before the chevron, not out with the counts.** The question the
+  colour answers is "does this need opening?", so it belongs next to the
+  control that opens it rather than at the far end of the header. The counts
+  keep the breakdown; the dot is only the worst of them.
+- **The rank is by what the colour should make you do.** `alert` is a fault
+  and `warn` is work that can still be lost, so both outrank `unpinned` — a
+  durable property of a remote that bites only on a write, and never at all on
+  a machine with one identity. `archive` sits directly above `ok`: it is
+  settled rather than pending, and takes grey over green only because a group
+  holding one is not in fact all clean. It is the one tone here that asks for
+  nothing, which is exactly why it must not outrank the three that do.
+- **The rollup derives from `severity`, and does not re-read the flags.** Same
+  rule that already governs `bucket`: one judgement, made in one place. A
+  second reading of the same flags in a second function is what let a
+  serialisation bug colour broken repos green while their own flags disagreed,
+  and a group dot is the worst possible place to repeat it — it is the summary
+  you trust instead of opening the thing it summarises.
+- **`retired` takes an indicator too**, though it is not a scanned group. It
+  carries the same chevron, and without a dot the chevrons below would sit a
+  dot's width off the column above. Grey by default, since a tombstone is the
+  settled end of a decision; red only for the on-disk contradiction, which is
+  the one thing in that section that wants looking at.
+
 ## v0.1.8
 
 - **`clean` is a chip like everything else in its column.** It was bare text
