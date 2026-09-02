@@ -24,6 +24,15 @@ APP_NAME="gtrack.app"
 BUILT="src-tauri/target/release/bundle/macos/$APP_NAME"
 
 if [[ "${1:-}" != "--skip-build" ]]; then
+  # `npm run tauri` resolves the CLI out of node_modules/.bin, so on a fresh
+  # clone this fails with "tauri: command not found" — which reads like a
+  # missing global tool rather than "you have not installed deps yet".
+  # Checking for the CLI itself, not just the directory, also catches a
+  # half-finished install.
+  if [[ ! -x node_modules/.bin/tauri ]]; then
+    echo "--- Installing npm dependencies (first build here) ---"
+    npm install
+  fi
   echo "--- Building gtrack (release) ---"
   npm run tauri build
 fi
