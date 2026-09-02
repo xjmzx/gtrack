@@ -6,15 +6,16 @@ ICONDIR ?= $(PREFIX)/share/icons/hicolor/scalable/apps
 DESKTOP_OUT := $(APPDIR)/gtrack.desktop
 TAURI_BIN   := src-tauri/target/release/gtrack
 
-.PHONY: help deps dev build install uninstall check test clean icons
+.PHONY: help deps dev build install uninstall check test clean icons install-guard
 
 help:
 	@echo "Targets:"
 	@echo "  make deps       npm install + cargo fetch (one-time setup)"
 	@echo "  make dev        run 'tauri dev' (hot-reload)"
 	@echo "  make build      release build of frontend + Rust binary"
-	@echo "  make install    copy binary + desktop entry under PREFIX"
+	@echo "  make install    copy binary + desktop entry under PREFIX  [Linux]"
 	@echo "                  (default PREFIX=\$$HOME/.local; sudo PREFIX=/usr/local for system-wide)"
+	@echo "  ./install.sh    build a .app and install it to /Applications  [macOS]"
 	@echo "  make uninstall  remove what 'install' put down"
 	@echo "  make check      typecheck + cargo check (no build)"
 	@echo "  make test       unit tests"
@@ -52,7 +53,17 @@ check:
 test:
 	cd src-tauri && cargo test
 
-install: $(TAURI_BIN)
+# Guard, not part of the recipe: as a prerequisite this runs BEFORE
+# $(TAURI_BIN), so macOS is turned away immediately instead of after paying for
+# a full release build it is not going to install.
+install-guard:
+	@if [ "$$(uname)" = "Darwin" ]; then \
+		echo "'make install' is the Linux layout (bare binary + .desktop)."; \
+		echo "On macOS run ./install.sh — it builds a .app and installs it to /Applications."; \
+		exit 1; \
+	fi
+
+install: install-guard $(TAURI_BIN)
 	install -d $(BINDIR) $(APPDIR) $(ICONDIR)
 	install -m 0755 $(TAURI_BIN) $(BINDIR)/gtrack
 	install -m 0644 icon.svg $(ICONDIR)/gtrack.svg
