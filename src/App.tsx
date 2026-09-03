@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
-import { ChevronDown, ChevronRight, GitBranch, RefreshCw, TriangleAlert } from "lucide-react";
+import { ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, GitBranch, RefreshCw, TriangleAlert } from "lucide-react";
 import { cn } from "./lib/cn";
 import { loadPrefs, savePrefs, type Prefs } from "./lib/prefs";
 import {
@@ -176,12 +176,16 @@ export default function App() {
         )}
 
         <div className="ml-auto flex items-center gap-1">
+          {/* Icon-only: the label cost more width than it earned next to the
+              filter chips, and the chevrons say the same thing. The accessible
+              name moves to aria-label so it is not lost with the text. */}
           <button
             onClick={toggleAll}
             title={allCollapsed ? "Expand every group" : "Collapse every group"}
-            className="px-2 py-1 rounded text-xs font-mono text-muted hover:text-fg hover:bg-fg/5 transition-colors"
+            aria-label={allCollapsed ? "Expand every group" : "Collapse every group"}
+            className="px-1.5 py-1 rounded text-muted hover:text-fg hover:bg-fg/5 transition-colors"
           >
-            {allCollapsed ? "expand" : "collapse"}
+            {allCollapsed ? <ChevronsUpDown size={13} /> : <ChevronsDownUp size={13} />}
           </button>
           <div className="flex items-center rounded overflow-hidden border border-surfaceHover">
             {(
@@ -211,7 +215,7 @@ export default function App() {
             onClick={() => void run(false)}
             disabled={busy}
             title="Re-read local state. No network."
-            className="px-2 py-1 rounded text-xs font-mono text-muted hover:text-fg hover:bg-fg/5 disabled:opacity-40 transition-colors"
+            className="px-2.5 py-1 rounded text-xs font-mono text-fg bg-surfaceHover hover:bg-fg/10 disabled:opacity-40 transition-colors"
           >
             rescan
           </button>
