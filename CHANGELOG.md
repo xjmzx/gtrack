@@ -1,5 +1,40 @@
 # Changelog
 
+## v0.1.10
+
+- **macOS installs with `./install.sh`, like the rest of the suite.** `make
+  install` is the Linux layout — a bare binary in `~/.local/bin` beside a
+  `.desktop` entry — which on macOS leaves no `Info.plist`, no icon, no bundle
+  identifier and nothing Finder or the Dock will treat as an app. The script
+  builds the real `.app` (a full `tauri build`, not the `--no-bundle` one `make
+  build` does), installs it to `/Applications` and relaunches. `make install`
+  now turns macOS away rather than half-doing it, and `install.sh` refuses to
+  run anywhere else, so each platform has exactly one path and it says so.
+- **A fresh clone installs its npm deps instead of failing obscurely.** `npm run
+  tauri` resolves the CLI out of `node_modules/.bin`, so before `npm install`
+  it failed with "tauri: command not found" — which reads as a missing global
+  tool rather than the truth. It now checks for the CLI binary itself, not just
+  the directory, which also catches a half-finished install.
+- **A manual release builds the tag it was asked for.** `workflow_dispatch`
+  names a tag to publish, but `actions/checkout` defaults to the branch the run
+  started from — so a hand-kicked release built `main` and uploaded those
+  artifacts to the tag's release, leaving it holding binaries the tag never
+  contained. All three jobs now check out `inputs.tag || github.ref`. Tag pushes
+  were never affected; `github.ref` is already the tag there.
+- **`rescan` looks like a button.** It was bare text beside `fetch`'s filled
+  chip, so the one control that re-reads state *without* touching the network
+  did not read as a control at all. It now carries a `surfaceHover` fill and
+  `fetch`'s padding — deliberately secondary, since `fetch` keeps the accent.
+- **The expand/collapse toggle drops its label.** It spent width on a word its
+  own chevrons already say, in the one row where width is worth something. The
+  accessible name moved to `aria-label`, because `title` alone is not a
+  reliable name.
+- **`fetch` joins the mono the rest of the header speaks.** It was the only
+  sans element among the version chip, the filter chips and `rescan`, so
+  matching moved `fetch` rather than the other four. `font-medium` went with
+  it: the accent fill already marks the primary action, and one size, one
+  padding and one face is enough.
+
 ## v0.1.9
 
 - **A collapsed group now says how bad, not just how much.** Everything opens
