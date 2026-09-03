@@ -223,7 +223,7 @@ export default function App() {
             onClick={() => void run(true)}
             disabled={busy}
             title="Fetch every tracked remote, then rescan"
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium text-bg bg-accent hover:bg-accent/90 disabled:opacity-40 transition-colors"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono text-bg bg-accent hover:bg-accent/90 disabled:opacity-40 transition-colors"
           >
             <RefreshCw size={11} className={busy ? "animate-spin" : ""} />
             fetch
