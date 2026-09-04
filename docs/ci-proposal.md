@@ -64,16 +64,35 @@ usual objection to a 3-OS matrix (macOS bills 10x, Windows 2x) does not apply.
 
   | platform | cold cache | warm cache |
   |---|---|---|
-  | Linux x86_64 | — | — |
-  | macOS arm64 | — | — |
-  | Windows x86_64 | — | — |
+  | Linux x86_64 | 5m04s | — |
+  | macOS arm64 | 3m50s | — |
+  | Windows x86_64 | 7m00s | — |
 
-- **The duplicated `npm run build`.** It runs on all three platforms, but
-  TypeScript is platform-independent — only the `dist/` output is needed by
-  `tauri-build`. Building once and passing `dist/` to the other two as an
-  artifact would cut it, at the cost of a fourth job and more moving parts.
-  **Measure first**; if the frontend build is a small fraction of each run,
-  this is not worth the complexity.
+  First run (`33884023384`, all green): **~7m wall-clock**, the three in
+  parallel, against 14m52s for the v0.1.10 release. Windows is the long pole
+  and sets the number; it is slower at everything (checkout 11s vs 1s, Rust
+  setup 23s vs 13s, npm deps 12s vs 3s) on top of slower compilation.
+
+- ~~**The duplicated `npm run build`.**~~ **Answered: leave it.** It costs
+  **5s, 5s and 7s** on the three platforms — around 1.5% of each run. A fourth
+  job and an artifact hand-off to reclaim that would be a clear loss.
+
+- **New, and worth more: `cargo check` and `cargo test` pay for compilation
+  twice.** They are the whole runtime — 195s of Linux's 304s, 155s of macOS's
+  230s, 270s of Windows' 420s, about 64% everywhere — and they do not share
+  artifacts, because `check` skips codegen and `test` needs it.
+
+  | platform | cargo check | cargo test |
+  |---|---|---|
+  | Linux | 89s | 106s |
+  | macOS | 79s | 76s |
+  | Windows | 134s | 136s |
+
+  `cargo test` already compiles the bin targets, so the separate `check` may be
+  buying little beyond a faster failure on a syntax error. Collapsing to a
+  single `cargo test --locked --all-targets` looks like it could take roughly a
+  third off every platform. **Worth trying once there are warm-cache numbers to
+  compare against** — measure it, do not assume it.
 
 - **One file or eight.** Eight copies is the coordinated-wave problem the suite
   already pays repeatedly. A reusable workflow (`workflow_call`) in one repo,
