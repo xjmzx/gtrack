@@ -88,11 +88,44 @@ usual objection to a 3-OS matrix (macOS bills 10x, Windows 2x) does not apply.
   | macOS | 79s | 76s |
   | Windows | 134s | 136s |
 
-  `cargo test` already compiles the bin targets, so the separate `check` may be
-  buying little beyond a faster failure on a syntax error. Collapsing to a
-  single `cargo test --locked --all-targets` looks like it could take roughly a
-  third off every platform. **Worth trying once there are warm-cache numbers to
-  compare against** — measure it, do not assume it.
+  `cargo test` already compiles the bin targets, so the separate `check` bought
+  little beyond a faster failure on a syntax error.
+
+  **Tried it. Not faster — the projection was wrong.** Collapsed to a single
+  `cargo test --locked --all-targets` and measured warm against warm:
+
+  | platform | check + test | test only | delta |
+  |---|---|---|---|
+  | Linux | 99s | 97s | −2s |
+  | macOS | 53s | 54s | +1s |
+  | Windows | 117s | 115s | −2s |
+
+  "A third off every platform" came from cold-cache numbers and does not
+  transfer: with a warm cache the duplicated compilation is itself nearly free,
+  so removing it saves nearly nothing. **Kept anyway** — one step instead of
+  two, no duplication to explain, and it should still pay on the cold runs that
+  follow a dependency change. But it is a simplification, not a saving.
+
+## Where the time actually goes (warm runs)
+
+The lesson from the above: on warm runs — which is most runs — **compilation is
+no longer the cost. Setup is.**
+
+| step | Linux | macOS | Windows |
+|---|---|---|---|
+| Install Tauri system deps (apt) | 33s | — | — |
+| Cache cargo target (restore) | 22s | 16s | 26s |
+| Setup Rust | 13s | 7s | 21s |
+| Setup Node | 6s | 6s | 12s |
+| Typecheck + frontend build | 4s | ~3s | 7s |
+| **cargo test** | **9s** | **12s** | **29s** |
+| **total** | **97s** | **54s** | **115s** |
+
+If CI wall-clock ever needs to come down, the targets are the **33s apt install
+on Linux** (a container image with the Tauri deps baked in would remove it
+outright) and the **16–26s cache restore**, not the tests. Neither is worth
+doing at these numbers — a ~2 minute CI is not a problem — but it is worth
+knowing which end to pull if it becomes one.
 
 - **One file or eight.** Eight copies is the coordinated-wave problem the suite
   already pays repeatedly. A reusable workflow (`workflow_call`) in one repo,
