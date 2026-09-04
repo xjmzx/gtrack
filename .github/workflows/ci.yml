@@ -1,0 +1,99 @@
+name: CI
+
+# PROPOSAL — see docs/ci-proposal.md. Trialled on gtrack first; the intent is
+# to settle the shape here, measure it over a few releases, then factor it into
+# a reusable workflow the other apps call.
+#
+# What this is for: nothing currently compiles a commit until a tag is pushed,
+# so a break reaches CI only once it is already a release. The release job then
+# half-publishes — the Linux job creates the release and owns its notes, and a
+# later platform failure leaves that release standing with fewer artifacts than
+# it should have. This runs the same checks before a tag exists.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# A second push to the same branch makes the first run's answer irrelevant.
+# Releases are never cancelled this way; this concurrency group is CI-only.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    # All three platforms, deliberately. The break this exists to catch is
+    # platform-specific compilation — ntree does not build on Windows at all
+    # (unconditional std::os::unix::fs::MetadataExt) — and a Linux-only CI
+    # would pass that happily. Linux-only here would be worse than nothing:
+    # it would report green on exactly the failure it was added to find.
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # Report every platform's verdict, not just the first to fail. Knowing
+      # "Windows only" versus "all three" is the difference between a
+      # portability bug and a plain mistake.
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-22.04, name: Linux x86_64 }
+          - { os: macos-14, name: macOS arm64 }
+          - { os: windows-latest, name: Windows x86_64 }
+
+    steps:
+      - uses: actions/checkout@v6
+
+      # Linux only. macOS and Windows get their WebView from the OS.
+      # Same set as release.yml: no libsecret-1-dev, since gtrack holds no
+      # secrets — it reads git and the filesystem and talks to nothing else.
+      - name: Install Tauri system deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libxdo-dev \
+            build-essential \
+            curl wget file
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo target
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          # Keyed per platform so the three do not evict each other.
+          key: ci-${{ matrix.os }}
+
+      - name: Install npm deps
+        run: npm ci
+
+      # These two are what `make check` runs, spelled out rather than invoked
+      # through make: GNU make is not dependably on PATH on windows-latest, and
+      # a CI that cannot run on the platform it exists to test is no use. If
+      # they drift from the Makefile, the Makefile is the source of truth.
+      #
+      # `npm run build` is `tsc && vite build`, so this is the typecheck — and
+      # it must run before cargo, because tauri-build resolves frontendDist
+      # (../dist) at build-script time and fails if it is absent.
+      - name: Typecheck + frontend build
+        run: npm run build
+
+      - name: cargo check
+        working-directory: src-tauri
+        run: cargo check --locked --all-targets
+
+      - name: cargo test
+        working-directory: src-tauri
+        run: cargo test --locked
