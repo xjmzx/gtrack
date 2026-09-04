@@ -90,10 +90,12 @@ jobs:
       - name: Typecheck + frontend build
         run: npm run build
 
-      - name: cargo check
-        working-directory: src-tauri
-        run: cargo check --locked --all-targets
-
+      # One step, not check-then-test. They shared almost nothing: `check`
+      # skips codegen and `test` needs it, so the two were compiling the crate
+      # twice for 64% of every run. `--all-targets` keeps what the separate
+      # check was for — it compiles bins and examples/scan.rs, not just the
+      # lib and its tests. Note it excludes doctests, which this crate has
+      # none of.
       - name: cargo test
         working-directory: src-tauri
-        run: cargo test --locked
+        run: cargo test --locked --all-targets
