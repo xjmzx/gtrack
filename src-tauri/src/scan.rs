@@ -30,6 +30,9 @@ pub enum RemoteKind {
     Ssh,
     /// `https://` — pushes need a credential helper or a token.
     Https,
+    /// `nostr://<npub>/<relay>/<repo>`, served by the `git-remote-nostr`
+    /// helper. The npub names the repo, never the key that signs the push.
+    Nostr,
     None,
 }
 
@@ -197,13 +200,26 @@ fn pins_account(kind: RemoteKind) -> bool {
         // an archive, and reporting it as unpinned would be noise on a state
         // that is already saying the true thing.
         RemoteKind::None => true,
-        RemoteKind::Https | RemoteKind::Ssh => false,
+        // `nostr://` is here for the reason the rest are, not for its scheme.
+        // Its npub names the repository being announced; the key that signs
+        // the push comes from `nostr.nsec` in git config, which ngit writes
+        // globally unless told otherwise and which every repo on the machine
+        // then shares. Resolved at push time from outside the URL, silent
+        // until something is signed by the wrong identity — the same hazard
+        // as an ssh-agent's key order, wearing a different protocol. A
+        // per-repo `nostr.nsec` genuinely does pin it and is invisible from
+        // here, so that case earns an amber it does not deserve; reading git
+        // config to tell them apart is the price of removing it, and amber on
+        // a remote that fetches perfectly well is the cheaper mistake.
+        RemoteKind::Https | RemoteKind::Ssh | RemoteKind::Nostr => false,
     }
 }
 
 fn classify_remote(url: &str) -> RemoteKind {
     if url.starts_with("https://") || url.starts_with("http://") {
         RemoteKind::Https
+    } else if url.starts_with("nostr://") {
+        RemoteKind::Nostr
     } else if url.starts_with("git@github.com:") || url.starts_with("ssh://") {
         RemoteKind::Ssh
     } else {
@@ -522,6 +538,18 @@ mod tests {
         assert_eq!(classify_remote("git@github.com:x/y.git"), RemoteKind::Ssh);
         assert_eq!(classify_remote("github-xjmzx:xjmzx/y.git"), RemoteKind::SshAlias);
         assert_eq!(classify_remote("git@adjmx:adjmx/y.git"), RemoteKind::SshAlias);
+    }
+
+    #[test]
+    fn a_scheme_git_cannot_speak_is_not_an_ssh_alias() {
+        // Before it had an arm this fell through the `else` and read as an
+        // alias — pinned by accident, which is the reading an alias earns by
+        // naming an `IdentityFile` and this URL does nothing to earn.
+        assert_eq!(classify_remote("nostr://npub1abc/git.example.com/repo"), RemoteKind::Nostr);
+        assert!(!pins_account(RemoteKind::Nostr));
+        // Rooted all the same: a helper-served remote is not an archive.
+        assert_eq!(rootedness(RemoteKind::Nostr, true), None);
+        assert_eq!(rootedness(RemoteKind::Nostr, false), Some("no upstream"));
     }
 
     #[test]

@@ -6,7 +6,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 
-export type RemoteKind = "ssh-alias" | "ssh" | "https" | "none";
+export type RemoteKind = "ssh-alias" | "ssh" | "https" | "nostr" | "none";
 
 export interface Versions {
   package: string | null;
