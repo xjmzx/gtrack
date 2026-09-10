@@ -1,5 +1,59 @@
 # Changelog
 
+## v0.1.11
+
+- **Remote helpers resolve in the windowed app.** A remote whose scheme git
+  does not speak natively is served by a separate binary —
+  `git-remote-<scheme>` — that git looks for on `PATH` and nowhere else, and a
+  windowed launch does not inherit the shell's: macOS hands an app started from
+  Finder launchd's, `/usr/bin:/bin:/usr/sbin:/sbin` and no more, with a Linux
+  `.desktop` launch the same story on a different list. So
+  `~/.local/bin/git-remote-nostr` was installed, working, and on `PATH` in
+  every terminal on the machine while staying invisible to the window: three
+  `nostr://` remotes that `git ls-remote` reached from a shell reported
+  `unreachable`, and the headless scanner and the window disagreed about the
+  same repositories on the same disk. Nothing separated them but how each was
+  started. `git_cmd` now appends the usual user bin directories — appended,
+  never prepended, so a `PATH` set deliberately keeps its precedence, and
+  missing directories are skipped so the list costs nothing on Windows.
+- **A `nostr://` remote is no longer mistaken for an SSH alias.** It had no arm
+  in `classify_remote`, so it fell through the `else` and read as
+  account-pinning by accident — the reading a host alias earns by naming an
+  `IdentityFile`, which that URL does nothing to earn. The npub names the
+  repository being announced; the key that signs the push comes from
+  `nostr.nsec` in git config, which ngit writes globally unless told otherwise
+  and which every repo on the machine then shares. That is `unpinned`, for the
+  reason https and bare ssh are. Its hint says so in its own terms rather than
+  pointing at a host alias that does not exist for it.
+- **A repository can be declared `no_push`.** The third declared decision
+  beside `archived` and `retired`, and like them it states an intent no reading
+  of the disk could recover. `1 unpushed` is a chore in every other row; on
+  these it is expected. The flag leads the list and takes a solid auburn chip —
+  the only filled block in the set — because every other flag reports something
+  to judge and this one is an instruction. Its bucket sits above `dirty`, so
+  routine amber cannot mask it, and below `config`, because a stale lock on a
+  held repo is still a stale lock. It has its own filter, matched on the flag,
+  so a held repo with a fault still appears under its own lens.
+- **The frontend has tests.** `bucket`, `severity` and `groupSeverity` are
+  where Rust's flags become a colour, a count and a filter, and they had none:
+  `make check` is `tsc && vite build` plus `cargo check`, which proves the code
+  compiles and says nothing about what it decides. Adding the `hold` tone to
+  `Severity` and not to the rank it is looked up in produced an `undefined`
+  severity that the group dot dereferenced, blanking the window — past a green
+  typecheck, green `make check`, 26 green Rust tests and a release build. The
+  rank is now a `Record<Severity, number>`, which makes that omission a compile
+  error, and fifteen vitest cases walk every member of `Severity` and `Bucket`
+  rather than picking cases, because the bug was a missing key rather than a
+  wrong answer. CI runs them after the typecheck; the release workflow runs
+  them before it builds bundles.
+- **`install.sh` stopped reassuring you about the gap it was standing next to.**
+  Its closing note had the trap right — a Finder launch gets launchd's `PATH` —
+  and then said git resolves anyway thanks to the `/usr/bin/git` shim. True of
+  the git binary, and silent about the helpers it goes looking for.
+- **CI compiles and tests all three platforms before a tag exists**, and does
+  it in one `cargo test --all-targets` step rather than check-then-test, which
+  was compiling the crate twice for most of every run.
+
 ## v0.1.10
 
 - **macOS installs with `./install.sh`, like the rest of the suite.** `make
