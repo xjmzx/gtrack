@@ -9,8 +9,10 @@
 // effect at all is `git fetch`, which updates remote-tracking refs and nothing
 // in the working tree, and it runs only when explicitly asked for.
 
+use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::OnceLock;
 
 use serde::Serialize;
 
@@ -85,6 +87,9 @@ pub struct RepoStatus {
 /// repository, so even a modest machine flashes a few hundred of them over the
 /// window and takes focus with every one — the app appears to redraw itself in
 /// a loop for the length of the scan. `CREATE_NO_WINDOW` is the whole fix.
+///
+/// It also carries the `PATH` from `child_path` below, which is what lets the
+/// windowed app reach the remote helpers a terminal can already see.
 fn git_cmd(dir: &Path) -> Command {
     let mut cmd = Command::new("git");
     #[cfg(windows)]
@@ -93,8 +98,74 @@ fn git_cmd(dir: &Path) -> Command {
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
+    // Resolved once. It reads the filesystem, where a fetching scan is some
+    // ten git invocations per repository across eight threads.
+    static CHILD_PATH: OnceLock<Option<OsString>> = OnceLock::new();
+    if let Some(path) = CHILD_PATH.get_or_init(child_path) {
+        cmd.env("PATH", path);
+    }
     cmd.arg("-C").arg(dir);
     cmd
+}
+
+/// The `PATH` child `git` processes get: the inherited one, plus the user bin
+/// directories a login shell has and a windowed launch does not.
+///
+/// A remote whose scheme git does not speak natively is served by a helper
+/// binary — `git-remote-<scheme>` — which git looks for on `PATH` and nowhere
+/// else. A windowed launch does not inherit the shell's: macOS hands an app
+/// started from Finder launchd's `PATH`, `/usr/bin:/bin:/usr/sbin:/sbin` and
+/// no more, and a Linux `.desktop` launch is the same story with a different
+/// list. So `~/.local/bin/git-remote-nostr` can be installed, working, and on
+/// `PATH` in every terminal on the machine while staying invisible to the
+/// window — which is exactly what happened here: three `nostr://` remotes that
+/// `git ls-remote` reached from a shell reported `unreachable` in the app, and
+/// the headless scanner and the window disagreed about the same repositories
+/// on the same disk. Nothing separated them but how each was started, and a
+/// tool whose answer depends on that is a tool with no answer.
+///
+/// A missing helper reaches `fetch_failure` as `unable to find remote helper`
+/// and lands, correctly by its rules, on `unreachable` — the conservative
+/// default doing its job on a cause it has no category for. Local
+/// misconfiguration is not a condition of the moment, and no wording of that
+/// flag would have made the fix findable. The `PATH` is the fix.
+///
+/// Appended, never prepended, so a `PATH` set deliberately keeps its
+/// precedence and this only adds places to look once those have missed.
+/// Directories that do not exist are skipped, which makes the list a guess
+/// about where helpers usually live rather than a claim about this machine —
+/// and is why the Unix-shaped entries cost nothing on Windows.
+fn child_path() -> Option<OsString> {
+    const HELPER_DIRS: &[&str] =
+        &["~/.local/bin", "~/.cargo/bin", "/opt/homebrew/bin", "/usr/local/bin"];
+    let current = std::env::var_os("PATH").unwrap_or_default();
+    let extra: Vec<PathBuf> = HELPER_DIRS
+        .iter()
+        .map(|d| crate::config::expand(d))
+        .filter(|p| p.is_dir())
+        .collect();
+    extend_path(&current, &extra)
+}
+
+/// Append `extra` to a `PATH`, skipping what is already on it.
+///
+/// `None` means *leave the inherited `PATH` alone* — either there was nothing
+/// to add, or a directory contained the separator character and the result
+/// would not join. Both are the safe direction: the inherited `PATH` is the
+/// one thing here known to be someone's actual intent.
+fn extend_path(current: &OsStr, extra: &[PathBuf]) -> Option<OsString> {
+    // An empty `PATH` splits into one *empty entry*, and an empty entry means
+    // the current directory — which, mid-scan, is a working tree.
+    let mut dirs: Vec<PathBuf> =
+        if current.is_empty() { Vec::new() } else { std::env::split_paths(current).collect() };
+    let mut added = false;
+    for dir in extra {
+        if !dirs.contains(dir) {
+            dirs.push(dir.clone());
+            added = true;
+        }
+    }
+    added.then(|| std::env::join_paths(&dirs).ok()).flatten()
 }
 
 fn git(dir: &Path, args: &[&str]) -> Option<String> {
@@ -451,6 +522,32 @@ mod tests {
         assert_eq!(classify_remote("git@github.com:x/y.git"), RemoteKind::Ssh);
         assert_eq!(classify_remote("github-xjmzx:xjmzx/y.git"), RemoteKind::SshAlias);
         assert_eq!(classify_remote("git@adjmx:adjmx/y.git"), RemoteKind::SshAlias);
+    }
+
+    #[test]
+    fn helper_directories_are_appended_and_never_duplicated() {
+        // Joined rather than written with a literal separator: `:` on Unix and
+        // `;` on Windows, and a hardcoded one makes this a single entry there.
+        let current = std::env::join_paths(["/usr/bin", "/bin"].map(PathBuf::from)).unwrap();
+        let local = PathBuf::from("/home/x/.local/bin");
+        let extended = extend_path(&current, std::slice::from_ref(&local)).unwrap();
+        let dirs: Vec<PathBuf> = std::env::split_paths(&extended).collect();
+        // Appended, so a deliberate `PATH` still wins every lookup it can.
+        assert_eq!(dirs.first(), Some(&PathBuf::from("/usr/bin")));
+        assert_eq!(dirs.last(), Some(&local));
+        // Already present: nothing added, and the inherited `PATH` stands.
+        assert!(extend_path(&extended, std::slice::from_ref(&local)).is_none());
+    }
+
+    #[test]
+    fn an_empty_path_does_not_become_the_working_tree() {
+        // `split_paths("")` yields one empty entry, and an empty entry is the
+        // current directory — mid-scan, a repository gtrack is reading.
+        let extended = extend_path(OsStr::new(""), &[PathBuf::from("/opt/x/bin")]).unwrap();
+        assert_eq!(
+            std::env::split_paths(&extended).collect::<Vec<_>>(),
+            vec![PathBuf::from("/opt/x/bin")]
+        );
     }
 
     #[test]
