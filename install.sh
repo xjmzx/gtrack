@@ -58,7 +58,14 @@ VER=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' \
 echo "Installed + relaunched: /Applications/$APP_NAME (v$VER)"
 
 echo
-echo "Note: gtrack shells out to git, and an app launched from Finder does not"
-echo "inherit your shell PATH — it gets launchd's. git resolves anyway because"
-echo "macOS keeps a shim at /usr/bin/git, but that is the Xcode command-line"
-echo "tools git, not a newer one you may have installed via Homebrew."
+echo "Note: an app launched from Finder does not inherit your shell PATH — it"
+echo "gets launchd's, which is /usr/bin:/bin:/usr/sbin:/sbin and nothing more."
+echo "gtrack shells out to git, so it appends the usual user bin directories to"
+echo "the PATH it hands each git process. That is what reaches the remote"
+echo "helpers: a nostr:// remote — or any scheme git does not speak natively —"
+echo "needs git-remote-<scheme> on PATH, and the /usr/bin/git shim does not"
+echo "carry one. Without it such a remote fetches fine in every terminal on the"
+echo "machine and reports 'unreachable' in the window."
+echo
+echo "Appended, never prepended, so git itself is still that shim — the Xcode"
+echo "command-line tools git, not a newer one you may have via Homebrew."
