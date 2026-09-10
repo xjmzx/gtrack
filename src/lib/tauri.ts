@@ -77,6 +77,9 @@ export interface Config {
   archived: string[];
   /** Repos deleted on purpose, kept as notes rather than trees. */
   retired: Tombstone[];
+  /** Repos that must not be pushed. Serialised snake_case, unlike RepoStatus:
+   *  Config has no rename_all on the Rust side. */
+  no_push: string[];
 }
 
 export const loadConfig = () => invoke<Config>("load_config");
@@ -94,7 +97,7 @@ export const scanRepos = (fetch: boolean) => invoke<RepoStatus[]>("scan_repos", 
  *  Derived from the flags Rust already computed, deliberately. Recomputing the
  *  same judgement in TypeScript is what let a serialisation bug colour broken
  *  repos green while their flags said otherwise. */
-export type Bucket = "clean" | "dirty" | "config" | "archive" | "unpinned";
+export type Bucket = "clean" | "dirty" | "config" | "archive" | "unpinned" | "hold";
 
 /** Things that are actually broken, and stay red.
  *
@@ -120,6 +123,13 @@ export function bucket(r: RepoStatus): Bucket {
   // sound ones reach their own bucket — those flags describe how a repo is
   // set up, not that something is wrong with it.
   if (r.flags.some((f) => CONFIG_FLAGS.has(f))) return "config";
+  // Above every other settled state, and above `dirty` in particular. A held
+  // repo very often *is* carrying unpushed commits — that is the situation the
+  // declaration exists for — and letting the amber win would put the row back
+  // among the things that look like chores, which is the whole thing being
+  // undone. Below `config` all the same: a stale lock on a held repo is still
+  // a stale lock, and nothing about not pushing it makes that less true.
+  if (r.flags.includes("no push")) return "hold";
   if (r.flags.includes("archive")) return "archive";
   // Above `dirty`, as it was when this counted as config: a remote protocol
   // persists until someone changes it, where uncommitted work turns over daily.
@@ -127,7 +137,7 @@ export function bucket(r: RepoStatus): Bucket {
   return r.flags.length > 0 ? "dirty" : "clean";
 }
 
-export type Severity = "alert" | "warn" | "ok" | "archive" | "unpinned";
+export type Severity = "alert" | "warn" | "ok" | "archive" | "unpinned" | "hold";
 
 export function severity(r: RepoStatus): Severity {
   const b = bucket(r);
@@ -140,12 +150,14 @@ export function severity(r: RepoStatus): Severity {
       return "archive";
     case "unpinned":
       return "unpinned";
+    case "hold":
+      return "hold";
     default:
       return "ok";
   }
 }
 
-export type Filter = "all" | "clean" | "dirty" | "unpinned" | "archive";
+export type Filter = "all" | "clean" | "dirty" | "unpinned" | "archive" | "hold";
 
 export function matches(r: RepoStatus, f: Filter): boolean {
   switch (f) {
@@ -160,6 +172,10 @@ export function matches(r: RepoStatus, f: Filter): boolean {
       // The flag, not the bucket: an archive that also has a fault sits in
       // `config`, and hiding it from its own lens would be the wrong answer.
       return r.flags.includes("archive");
+    case "hold":
+      // The flag again, for the reason the two above give: a held repo with a
+      // stale lock belongs in `config`, and its own lens must still find it.
+      return r.flags.includes("no push");
     default:
       return bucket(r) === f;
   }
@@ -171,10 +187,11 @@ export interface Counts {
   config: number;
   archive: number;
   unpinned: number;
+  hold: number;
 }
 
 export function counts(rows: RepoStatus[]): Counts {
-  const c: Counts = { clean: 0, dirty: 0, config: 0, archive: 0, unpinned: 0 };
+  const c: Counts = { clean: 0, dirty: 0, config: 0, archive: 0, unpinned: 0, hold: 0 };
   for (const r of rows) c[bucket(r)]++;
   return c;
 }

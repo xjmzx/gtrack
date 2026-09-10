@@ -462,6 +462,12 @@ fn inspect(path: &Path, root_label: &str, cfg: &Config, fetch: bool) -> RepoStat
     let versions = read_versions(path);
 
     let mut flags = Vec::new();
+    // First in the list, and deliberately ahead of the faults. Every other
+    // flag reports something to judge; this one is an instruction, and it is
+    // worth nothing if it is read after the row has already been acted on.
+    if cfg.is_no_push(&name) {
+        flags.push("no push".into());
+    }
     if !locks.is_empty() {
         flags.push("stale lock".into());
     }

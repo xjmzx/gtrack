@@ -55,6 +55,16 @@ const STATE_FLAGS: Record<string, { tone: string; hint: string }> = {
     tone: "bg-ok/10 text-ok/50",
     hint: "Nothing to do — no findings on this repo",
   },
+  // The one chip that is an instruction rather than an observation, and the
+  // only solid block in the set — the suite's filled-block form, spent here
+  // because it has to out-read every other chip on the row. `bg-auburn/15
+  // text-auburn` would have matched its neighbours and been the dimmest of
+  // them: auburn is a dark rust, ~3.6:1 on the surface where mauve manages
+  // ~6:1. A warning that recedes is not a warning.
+  "no push": {
+    tone: "bg-auburn text-bg font-semibold",
+    hint: "Declared no-push in gtrack.json. Unpushed commits here are expected rather than owed — pushing a nostr:// remote signs the commit into an event with nostr.nsec and publishes it to relays, where it cannot be recalled",
+  },
   unpinned: {
     tone: "bg-mauve/15 text-mauve",
     hint: "Remote does not name the account it authenticates as — https resolves through the credential helper, bare git@github.com through whichever key ssh-agent offers first. Use a host alias so pushes land on the right identity",
@@ -108,13 +118,15 @@ export function RepoRow({ r, zebra }: { r: RepoStatus; zebra: boolean }) {
         // https gets a tint faint enough to find but not to alarm.
         sev === "alert"
           ? "bg-alert/[0.07]"
-          : sev === "warn"
-            ? "bg-warn/[0.05]"
-            : sev === "unpinned"
-              ? "bg-mauve/[0.05]"
-              : zebra
-                ? "bg-surface/25"
-                : "",
+          : sev === "hold"
+            ? "bg-auburn/[0.07]"
+            : sev === "warn"
+              ? "bg-warn/[0.05]"
+              : sev === "unpinned"
+                ? "bg-mauve/[0.05]"
+                : zebra
+                  ? "bg-surface/25"
+                  : "",
       )}
       title={r.path}
     >
@@ -132,13 +144,15 @@ export function RepoRow({ r, zebra }: { r: RepoStatus; zebra: boolean }) {
           "h-7 w-1.5",
           sev === "alert"
             ? "bg-alert"
-            : sev === "warn"
-              ? "bg-warn"
-              : sev === "archive"
-                ? "bg-muted/40"
-                : sev === "unpinned"
-                  ? "bg-mauve/60"
-                  : "bg-ok/50",
+            : sev === "hold"
+              ? "bg-auburn"
+              : sev === "warn"
+                ? "bg-warn"
+                : sev === "archive"
+                  ? "bg-muted/40"
+                  : sev === "unpinned"
+                    ? "bg-mauve/60"
+                    : "bg-ok/50",
         )}
       />
 

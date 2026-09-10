@@ -123,6 +123,21 @@ pub struct Config {
     /// tombstone was written before the deletion happened.
     #[serde(default)]
     pub retired: Vec<Tombstone>,
+    /// Repositories that must not be pushed, by name.
+    ///
+    /// The third declared decision, beside `archived` and `retired`, and like
+    /// them it describes an intent no amount of reading the disk could
+    /// recover. A repo here is not broken and not finished — pushing it is
+    /// simply an act to take deliberately rather than because a row said
+    /// `1 unpushed` and the eye read that as a chore.
+    ///
+    /// The case it was built for: a `nostr://` remote. A push there is not a
+    /// transfer, it is a signature — the commit is wrapped in an event signed
+    /// with `nostr.nsec` and published to relays, where it cannot be recalled.
+    /// Nothing in the working tree distinguishes that from an ordinary push,
+    /// so nothing in a scan could infer it, so it has to be said.
+    #[serde(default)]
+    pub no_push: Vec<String>,
 }
 
 fn default_roots() -> Vec<Root> {
@@ -210,6 +225,10 @@ impl Default for Config {
             groups: default_groups(),
             archived: Vec::new(),
             retired: Vec::new(),
+            // Empty by default: a machine that has not said which repos must
+            // not be pushed has not made the decision, and guessing one would
+            // be inventing an intent.
+            no_push: Vec::new(),
         }
     }
 }
@@ -218,6 +237,11 @@ impl Config {
     /// Whether this repo has been declared retired.
     pub fn is_archived(&self, repo_name: &str) -> bool {
         self.archived.iter().any(|a| a == repo_name)
+    }
+
+    /// Whether pushing this repository has been declared off-limits.
+    pub fn is_no_push(&self, repo_name: &str) -> bool {
+        self.no_push.iter().any(|n| n == repo_name)
     }
 
     /// The tombstone for a name, if one was left. Used to mark the
@@ -379,6 +403,20 @@ mod tests {
         let c = Config::default();
         assert_eq!(c.group_for("relay.fizx.uk"), Some("fizx.uk"));
         assert_eq!(c.group_for("blst.upleb.uk"), Some("upleb.uk"));
+    }
+
+    #[test]
+    fn a_repo_is_only_no_push_when_it_was_declared_one() {
+        let cfg: Config = serde_json::from_str(r#"{"no_push":["ngit-cli-mirror"]}"#).unwrap();
+        assert!(cfg.is_no_push("ngit-cli-mirror"));
+        // Not a prefix or substring match: `ngit-cli` is a different repo, and
+        // a decision this consequential must land on the name it names.
+        assert!(!cfg.is_no_push("ngit-cli"));
+        assert!(!cfg.is_no_push("gtrack"));
+        // Absent from the file is a machine that never made the decision, not
+        // one that decided everything is pushable-with-care.
+        assert!(Config::default().no_push.is_empty());
+        assert!(!Config::default().is_no_push("ngit-cli-mirror"));
     }
 
     #[test]
