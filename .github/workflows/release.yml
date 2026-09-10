@@ -73,7 +73,9 @@ jobs:
       # on — a release that reports the wrong version for every repo would be
       # worse than no release.
       - name: Test
-        run: cd src-tauri && cargo test --lib
+        run: |
+          cd src-tauri && cargo test --lib
+          cd .. && npm test
 
       # Skip rpm — rpmbuild isn't on the ubuntu runners.
       - name: Build Tauri bundles (.deb + AppImage)

@@ -90,6 +90,16 @@ jobs:
       - name: Typecheck + frontend build
         run: npm run build
 
+      # The judgement layer — bucket / severity / groupSeverity — turns Rust's
+      # flags into a colour, a count and a filter, and the typecheck above says
+      # nothing about it. A `hold` tone added to the union and not to the rank
+      # it is looked up in typechecked cleanly, returned `undefined`, and threw
+      # in the group dot: a blank window, past a green CI and two installs.
+      # Cheap (~100ms) and the only thing standing between that class of bug
+      # and a release.
+      - name: Frontend tests
+        run: npm test
+
       # One step, not check-then-test. They shared almost nothing: `check`
       # skips codegen and `test` needs it, so the two were compiling the crate
       # twice for 64% of every run. `--all-targets` keeps what the separate

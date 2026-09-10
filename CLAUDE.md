@@ -15,7 +15,7 @@ records constraints invisible on the machine you are working on.
 ```
 make dev      # hot reload
 make check    # npm run build (tsc + vite) + cargo check
-make test     # unit tests
+make test     # unit tests — cargo, then vitest
 make build    # release
 ```
 
@@ -54,6 +54,22 @@ hesitate to run, which defeats the point of it.
 - **Versions "agree" when files are absent.** Only two files that both declare
   a version can disagree — most repos here have just one, and flagging those
   would make the signal useless.
+- **Anything keyed by a TypeScript union must be a `Record`, not an array.**
+  `SEVERITY_RANK` was `readonly Severity[]`, which is under no obligation to
+  list every member of the union it names. A `hold` tone was added to
+  `Severity` and not to the rank; `indexOf` answered -1, `Math.min` took it,
+  `SEVERITY_RANK[-1]` was `undefined`, and the group dot dereferenced it and
+  took React down — a blank window, past a green typecheck, `make check`, a
+  release build and two installs. `Record<Severity, _>` makes the same omission
+  a compile error. The rule generalises: `DOT` and `Counts` were already keyed
+  this way and neither could have failed like that.
+- **The frontend has tests now, and `make check` is not one of them.** `check`
+  is `tsc && vite build` plus `cargo check` — it proves the code compiles, and
+  says nothing about `bucket` / `severity` / `groupSeverity`, which is where
+  the flags Rust computed become a colour, a count and a filter. That trio
+  shipped a crash while 26 Rust tests stayed green. `src/lib/tauri.test.ts`
+  walks every member of `Severity` and `Bucket` rather than picking cases,
+  because the bug was never a wrong answer — it was a missing key.
 - **Shelling out to `git` is deliberate**, not laziness. Fetching uses the
   machine's own SSH config including per-account host aliases; libgit2 would
   need separate credential plumbing and would get it subtly wrong.

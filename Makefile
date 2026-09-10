@@ -52,6 +52,7 @@ check:
 
 test:
 	cd src-tauri && cargo test
+	npm test
 
 # Guard, not part of the recipe: as a prerequisite this runs BEFORE
 # $(TAURI_BIN), so macOS is turned away immediately instead of after paying for
