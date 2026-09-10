@@ -210,12 +210,35 @@ export function counts(rows: RepoStatus[]): Counts {
  *  holding one is not in fact all clean. It is the one tone here that asks for
  *  nothing, which is why it must not outrank the three that do.
  *
+ *  `hold` sits directly under `alert`, above the amber. Every other tone here
+ *  marks something you might do; `hold` marks something you must not, and a
+ *  caution that sorts below routine work can be masked by it in exactly the
+ *  mixed group where it needed saying.
+ *
  *  An empty set rolls up to `ok`. Nothing renders it — a group exists because
- *  it has rows — but the alternative is a partial function for no gain. */
-const SEVERITY_RANK: readonly Severity[] = ["alert", "warn", "unpinned", "archive", "ok"];
+ *  it has rows — but the alternative is a partial function for no gain.
+ *
+ *  A `Record`, not an array, and that is the whole point. This was
+ *  `readonly Severity[]`, which does not have to list every member of the
+ *  union — so adding `hold` to `Severity` left the rank behind, `indexOf`
+ *  answered -1, `Math.min` took it, and `SEVERITY_RANK[-1]` handed the group
+ *  dot an `undefined` severity to look up. A blank window, and a clean
+ *  typecheck. Keyed this way the compiler refuses a missing variant, so the
+ *  next tone added cannot repeat it. */
+const SEVERITY_RANK: Record<Severity, number> = {
+  alert: 0,
+  hold: 1,
+  warn: 2,
+  unpinned: 3,
+  archive: 4,
+  ok: 5,
+};
 
 export function groupSeverity(rows: RepoStatus[]): Severity {
-  let worst = SEVERITY_RANK.length - 1;
-  for (const r of rows) worst = Math.min(worst, SEVERITY_RANK.indexOf(severity(r)));
-  return SEVERITY_RANK[worst];
+  let worst: Severity = "ok";
+  for (const r of rows) {
+    const s = severity(r);
+    if (SEVERITY_RANK[s] < SEVERITY_RANK[worst]) worst = s;
+  }
+  return worst;
 }
