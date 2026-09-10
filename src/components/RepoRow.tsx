@@ -1,5 +1,5 @@
 import { cn } from "../lib/cn";
-import { severity, type RepoStatus } from "../lib/tauri";
+import { severity, type RemoteKind, type RepoStatus } from "../lib/tauri";
 
 /** A version cell that shows disagreement rather than picking a winner.
  *  A release needs package.json, Cargo.toml and tauri.conf.json bumped
@@ -61,15 +61,34 @@ const STATE_FLAGS: Record<string, { tone: string; hint: string }> = {
   },
 };
 
-function Flag({ text }: { text: string }) {
+/** Why a remote fails to pin its account, where that differs by remote form.
+ *
+ *  The flag is one property — nothing in the URL names the identity a push
+ *  authenticates as — but the machinery behind it is not shared, and neither
+ *  is the way out. The hint above names ssh-agent and the credential helper
+ *  and ends at "use a host alias", none of which a `nostr://` remote has: its
+ *  signing key comes from git config, and there is no alias to reach for. A
+ *  hint that confidently sends someone to a fix that does not exist for their
+ *  remote is worse than the chip carrying no explanation at all, so a form
+ *  that differs says its own thing and the rest fall back. */
+const UNPINNED_HINTS: Partial<Record<RemoteKind, string>> = {
+  nostr:
+    "Remote does not name the account it authenticates as — the npub names the repository being announced, while the key that signs the push comes from nostr.nsec in git config, which is global by default and shared by every repo on the machine. Set nostr.nsec locally to pin this one",
+};
+
+function Flag({ text, remoteKind }: { text: string; remoteKind: RemoteKind }) {
   const state = STATE_FLAGS[text];
   const tone = ALERT_FLAGS.has(text)
     ? "bg-alert/20 text-alert"
     : (state?.tone ?? "bg-surfaceHover/70 text-fg/70");
+  // A per-remote override first, then the flag's own hint, then the alert
+  // table — a chip with nothing to say still renders, it just has no title.
+  const hint =
+    (text === "unpinned" ? UNPINNED_HINTS[remoteKind] : undefined) ?? state?.hint ?? ALERT_HINTS[text];
   return (
     <span
       className={cn("px-1.5 py-px rounded text-[11px] font-mono shrink-0 leading-snug", tone)}
-      title={state?.hint ?? ALERT_HINTS[text]}
+      title={hint}
     >
       {text}
     </span>
@@ -149,9 +168,9 @@ export function RepoRow({ r, zebra }: { r: RepoStatus; zebra: boolean }) {
 
       <div className="hidden md:flex items-center gap-1.5 min-w-0 overflow-hidden">
         {r.flags.length === 0 ? (
-          <Flag text="clean" />
+          <Flag text="clean" remoteKind={r.remoteKind} />
         ) : (
-          r.flags.map((f) => <Flag key={f} text={f} />)
+          r.flags.map((f) => <Flag key={f} text={f} remoteKind={r.remoteKind} />)
         )}
       </div>
     </div>
