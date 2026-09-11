@@ -1,15 +1,21 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <!-- PLACEHOLDER. The suite's icon masters live in the Figma set and are
-       exported per app; this is a stand-in so gtrack does not share nping's
-       mark in a launcher. Replace from the Figma export when one exists. -->
-  <rect width="512" height="512" rx="96" fill="#0b0f14"/>
-  <g stroke="#7af0cd" stroke-width="34" stroke-linecap="round" fill="none">
-    <path d="M170 128 V300"/>
-    <path d="M170 300 q0 68 68 68 h36"/>
-  </g>
-  <circle cx="170" cy="112" r="42" fill="#7af0cd"/>
-  <circle cx="170" cy="384" r="42" fill="#7af0cd"/>
-  <circle cx="342" cy="368" r="42" fill="#a78bfa"/>
-  <circle cx="342" cy="150" r="42" fill="#a78bfa"/>
-  <path d="M342 192 V326" stroke="#a78bfa" stroke-width="34" stroke-linecap="round"/>
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+<mask id="mask0_3500_44" style="mask-type:alpha" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024">
+<rect width="1024" height="1024" fill="url(#paint0_linear_3500_44)"/>
+</mask>
+<g mask="url(#mask0_3500_44)">
+<rect width="1024" height="1024" rx="80" fill="#2F0056"/>
+<rect x="768" y="772" width="72" height="524" transform="rotate(90 768 772)" fill="#C6FFF7"/>
+<circle cx="244" cy="236" r="100" fill="#C6FFF7"/>
+<circle cx="244" cy="796" r="100" fill="#C6FFF7"/>
+<circle cx="732" cy="346" r="100" fill="#F1C8FF"/>
+<circle cx="732" cy="792" r="100" fill="#F1C8FF"/>
+<rect x="696" y="294" width="72" height="550" fill="#F1C8FF"/>
+<rect x="208" y="222" width="72" height="550" fill="#C6FFF7"/>
+</g>
+<defs>
+<linearGradient id="paint0_linear_3500_44" x1="512" y1="0" x2="512" y2="1024" gradientUnits="userSpaceOnUse">
+<stop stop-color="#1E1E2E"/>
+<stop offset="1" stop-color="#616194"/>
+</linearGradient>
+</defs>
 </svg>
