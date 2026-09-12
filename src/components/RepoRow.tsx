@@ -57,12 +57,17 @@ const STATE_FLAGS: Record<string, { tone: string; hint: string }> = {
   },
   // The one chip that is an instruction rather than an observation, and the
   // only solid block in the set — the suite's filled-block form, spent here
-  // because it has to out-read every other chip on the row. `bg-auburn/15
-  // text-auburn` would have matched its neighbours and been the dimmest of
-  // them: auburn is a dark rust, ~3.6:1 on the surface where mauve manages
-  // ~6:1. A warning that recedes is not a warning.
+  // because it has to out-read every other chip on the row.
+  //
+  // Mauve rather than a warm tone, and the distinction is the point: no-push
+  // states a property of the remote, exactly as `unpinned` does, and nothing
+  // about it is broken or owed. Auburn said otherwise for a release — the one
+  // group behaving exactly as declared was also the only one wearing a colour
+  // the eye reads as a fault. The emphasis lives in the form instead: solid
+  // against `unpinned`'s `bg-mauve/15`, so the two read as one family at two
+  // weights where they sit side by side on every ngit row.
   "no push": {
-    tone: "bg-auburn text-bg font-semibold",
+    tone: "bg-mauve text-bg font-semibold",
     hint: "Declared no-push in gtrack.json. Unpushed commits here are expected rather than owed — pushing a nostr:// remote signs the commit into an event with nostr.nsec and publishes it to relays, where it cannot be recalled",
   },
   unpinned: {
@@ -119,7 +124,7 @@ export function RepoRow({ r, zebra }: { r: RepoStatus; zebra: boolean }) {
         sev === "alert"
           ? "bg-alert/[0.07]"
           : sev === "hold"
-            ? "bg-auburn/[0.07]"
+            ? "bg-mauve/[0.07]"
             : sev === "warn"
               ? "bg-warn/[0.05]"
               : sev === "unpinned"
@@ -145,7 +150,7 @@ export function RepoRow({ r, zebra }: { r: RepoStatus; zebra: boolean }) {
           sev === "alert"
             ? "bg-alert"
             : sev === "hold"
-              ? "bg-auburn"
+              ? "bg-mauve"
               : sev === "warn"
                 ? "bg-warn"
                 : sev === "archive"

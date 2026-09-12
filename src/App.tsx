@@ -37,7 +37,7 @@ const DOT: Record<Severity, { tone: string; hint: string }> = {
     hint: "A remote here does not name the account it authenticates as",
   },
   hold: {
-    tone: "bg-auburn",
+    tone: "bg-mauve",
     hint: "A repo here is declared no-push — pushing it signs and publishes, so it is done deliberately or not at all",
   },
   archive: { tone: "bg-muted/50", hint: "Nothing to do — but this group holds a local-only archive" },
@@ -198,7 +198,7 @@ export default function App() {
                 ["clean", total.clean, "text-ok", "Nothing to do"],
                 ["dirty", total.dirty, "text-warn", "Work in progress — uncommitted, unpushed or behind"],
                 ["unpinned", repos.filter((r) => r.flags.includes("unpinned")).length, "text-mauve", "Remote does not name the account it authenticates as — https, or a bare git@github.com. Use a host alias so pushes land on the right identity"],
-                ["hold", repos.filter((r) => r.flags.includes("no push")).length, "text-auburn", "Declared no-push in gtrack.json — unpushed commits here are expected, not owed. A nostr:// push signs the commit into an event and publishes it to relays"],
+                ["hold", repos.filter((r) => r.flags.includes("no push")).length, "text-mauve", "Declared no-push in gtrack.json — unpushed commits here are expected, not owed. A nostr:// push signs the commit into an event and publishes it to relays"],
                 ["archive", total.archive, "text-muted", "No remote — kept deliberately as a local-only archive"],
               ] as const
             ).map(([key, n, tone, hint]) => (
@@ -286,6 +286,15 @@ export default function App() {
                   )}
                   {c.archive > 0 && (
                     <span className="text-muted/60" title={`${c.archive} local-only archive`}>{c.archive}</span>
+                  )}
+                  {/* `bucket` puts a held repo here and nowhere else, so without
+                      this the ngit group — three repos, all declared no-push —
+                      showed no count at all, closed or open. The one group that
+                      says nothing about itself was the one whose whole point is
+                      that its unpushed commits are expected. Counted, never
+                      alarming: mauve like the chip, unboxed like the rest. */}
+                  {c.hold > 0 && (
+                    <span className="text-mauve" title={`${c.hold} declared no-push`}>{c.hold}</span>
                   )}
                   {c.config > 0 && (
                     <span className="px-1.5 rounded bg-alert/25 text-alert font-semibold" title={`${c.config} needing a fix`}>
