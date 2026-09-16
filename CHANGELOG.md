@@ -1,7 +1,24 @@
 # Changelog
 
-## Unreleased
+## v0.1.12
 
+- **Private repositories are marked beside their name with a lock**, in
+  `digital` blue. The chip column is hidden below the `md` breakpoint and the
+  name never is, so the reminder survives a narrow window. Visibility stays out
+  of the margin bar deliberately: that bar is status and nothing else, and the
+  group dot rolls it up — a second meaning in the same strip would break both.
+- **The `private` chip is blue**, in `unpinned`'s faint-fill form, where it had
+  been grey and read as `archive` at a glance.
+- **Visibility is remembered between launches.** It is only measured during a
+  fetch and gtrack never fetches on its own, so every launch showed no lock at
+  all until fetch was clicked. The last answer is kept in localStorage, keyed by
+  path and remote URL together, and drawn dimmed until a fetch this session
+  confirms it — stale shown as stale, as with ahead/behind. A fetch that cannot
+  tell keeps the last answer rather than erasing it.
+- **Margin bars no longer run together.** A full-height bar met its
+  neighbour's, so a run of same-status rows drew one unbroken stripe. The bar
+  is now shorter than its row, which keeps the list's density; the corners
+  stay square.
 - **Private GitHub repositories carry a `private` chip.** Visibility is not on
   disk, so after a successful fetch gtrack asks GitHub for the repository
   anonymously over https: readable is public, a refused anonymous read is

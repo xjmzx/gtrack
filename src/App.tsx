@@ -3,6 +3,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, GitBranch, RefreshCw, TriangleAlert } from "lucide-react";
 import { cn } from "./lib/cn";
 import { loadPrefs, savePrefs, type Prefs } from "./lib/prefs";
+import { loadVisibility, remember, saveVisibility, type VisibilityCache } from "./lib/visibility";
 import {
   counts,
   groupSeverity,
@@ -72,6 +73,7 @@ export default function App() {
   const [filter, setFilter] = useState<Filter>("all");
   const [prefs, setPrefs] = useState<Prefs>(loadPrefs);
   const [retired, setRetired] = useState<Tombstone[]>([]);
+  const [visibility, setVisibility] = useState<VisibilityCache>(loadVisibility);
 
   useEffect(() => {
     getVersion().then(setAppVersion).catch(() => setAppVersion(null));
@@ -100,6 +102,13 @@ export default function App() {
     try {
       const rows = await scanRepos(fetch);
       setRepos(rows);
+      // Every scan, not only fetches: a local scan measures nothing, so it
+      // keeps each answer, but it is what prunes trees no longer on disk.
+      setVisibility((prev) => {
+        const next = remember(prev, rows);
+        saveVisibility(next);
+        return next;
+      });
       setScannedAt(new Date());
       setWasFetched(fetch);
     } catch (e) {
@@ -303,7 +312,7 @@ export default function App() {
                   )}
                 </span>
               </button>
-              {isOpen && rows.map((r, i) => <RepoRow key={r.path} r={r} zebra={i % 2 === 1} />)}
+              {isOpen && rows.map((r, i) => <RepoRow key={r.path} r={r} zebra={i % 2 === 1} visibility={visibility} />)}
             </section>
           );
         })}
@@ -365,8 +374,9 @@ export default function App() {
                       here ? "bg-alert/[0.07]" : i % 2 === 1 ? "bg-surface/25" : "",
                     )}
                   >
-                    <div className="grid grid-cols-[6px_minmax(7rem,13rem)_minmax(0,1fr)] md:grid-cols-[6px_minmax(9rem,15rem)_8.5rem_minmax(0,1fr)] items-center gap-x-3 pr-2 max-w-[64rem]">
-                      <div className={cn("h-7 w-1.5", here ? "bg-alert" : "bg-muted/25")} />
+                    <div className="grid grid-cols-[6px_minmax(7rem,13rem)_minmax(0,1fr)] md:grid-cols-[6px_minmax(9rem,15rem)_8.5rem_minmax(0,1fr)] items-center gap-x-3 pr-2 max-w-[64rem] min-h-7">
+                      {/* Inset like a repo row's bar — see RepoRow. */}
+                      <div className={cn("h-6 w-1.5", here ? "bg-alert" : "bg-muted/25")} />
                       <span className="text-sm text-muted truncate leading-snug">{t.name}</span>
                       <span className="hidden md:block font-mono text-[11px] text-muted/60 tabular-nums leading-snug">
                         {t.removed ?? <span className="text-muted/30">—</span>}

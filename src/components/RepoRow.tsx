@@ -1,5 +1,7 @@
+import { Lock } from "lucide-react";
 import { cn } from "../lib/cn";
 import { severity, type RemoteKind, type RepoStatus } from "../lib/tauri";
+import { shownVisibility, type ShownVisibility, type VisibilityCache } from "../lib/visibility";
 
 /** A version cell that shows disagreement rather than picking a winner.
  *  A release needs package.json, Cargo.toml and tauri.conf.json bumped
@@ -70,10 +72,12 @@ const STATE_FLAGS: Record<string, { tone: string; hint: string }> = {
     tone: "bg-mauve text-bg font-semibold",
     hint: "Declared no-push in gtrack.json. Unpushed commits here are expected rather than owed — pushing a nostr:// remote signs the commit into an event with nostr.nsec and publishes it to relays, where it cannot be recalled",
   },
-  // Grey with `archive`: a settled choice that asks for nothing. Drawn beside
-  // the flags, never among them — see `visibility` in lib/tauri.ts.
+  // `digital` blue, in `unpinned`'s faint-fill form: a property of the remote,
+  // like it, and just as far from a fault. Blue rather than grey so it cannot
+  // be mistaken for `archive` at a glance, which is what it was confused with.
+  // Drawn beside the flags, never among them — see `visibility` in lib/tauri.ts.
   private: {
-    tone: "bg-muted/15 text-muted",
+    tone: "bg-digital/15 text-digital",
     hint: "Private on GitHub — the fetch succeeded, and the same repository refused a read without credentials. Checked on each fetch",
   },
   unpinned: {
@@ -97,7 +101,22 @@ const UNPINNED_HINTS: Partial<Record<RemoteKind, string>> = {
     "Remote does not name the account it authenticates as — the npub names the repository being announced, while the key that signs the push comes from nostr.nsec in git config, which is global by default and shared by every repo on the machine. Set nostr.nsec locally to pin this one",
 };
 
-function Flag({ text, remoteKind }: { text: string; remoteKind: RemoteKind }) {
+/** Hint for a visibility the app remembers rather than measured just now. */
+const REMEMBERED_HINT =
+  "Private at the last fetch — remembered, not yet confirmed this session. Fetch to check again";
+
+function Flag({
+  text,
+  remoteKind,
+  hintOverride,
+  dim = false,
+}: {
+  text: string;
+  remoteKind: RemoteKind;
+  hintOverride?: string;
+  /** Remembered rather than measured this session. */
+  dim?: boolean;
+}) {
   const state = STATE_FLAGS[text];
   const tone = ALERT_FLAGS.has(text)
     ? "bg-alert/20 text-alert"
@@ -105,10 +124,13 @@ function Flag({ text, remoteKind }: { text: string; remoteKind: RemoteKind }) {
   // A per-remote override first, then the flag's own hint, then the alert
   // table — a chip with nothing to say still renders, it just has no title.
   const hint =
-    (text === "unpinned" ? UNPINNED_HINTS[remoteKind] : undefined) ?? state?.hint ?? ALERT_HINTS[text];
+    hintOverride ??
+    (text === "unpinned" ? UNPINNED_HINTS[remoteKind] : undefined) ??
+    state?.hint ??
+    ALERT_HINTS[text];
   return (
     <span
-      className={cn("px-1.5 py-px rounded text-[11px] font-mono shrink-0 leading-snug", tone)}
+      className={cn("px-1.5 py-px rounded text-[11px] font-mono shrink-0 leading-snug", tone, dim && "opacity-50")}
       title={hint}
     >
       {text}
@@ -116,8 +138,31 @@ function Flag({ text, remoteKind }: { text: string; remoteKind: RemoteKind }) {
   );
 }
 
-export function RepoRow({ r, zebra }: { r: RepoStatus; zebra: boolean }) {
+/** The glance-level marker, beside the name.
+ *
+ *  The chip carries the detail but lives in a column that is hidden below the
+ *  `md` breakpoint; the name never is. Visibility stays out of the margin bar
+ *  on purpose: that bar is status and nothing else, and the group dot rolls it
+ *  up — a second meaning in the same strip would break both. */
+function PrivateLock({ v }: { v: ShownVisibility }) {
+  const label = v.confirmed ? "Private on GitHub" : "Private at the last fetch — not yet confirmed this session";
+  return (
+    <Lock
+      size={11}
+      strokeWidth={2.25}
+      className={cn("shrink-0 self-center text-digital", !v.confirmed && "opacity-40")}
+      aria-label={label}
+      role="img"
+    >
+      <title>{label}</title>
+    </Lock>
+  );
+}
+
+export function RepoRow({ r, zebra, visibility }: { r: RepoStatus; zebra: boolean; visibility: VisibilityCache }) {
   const sev = severity(r);
+  const vis = shownVisibility(r, visibility);
+  const priv = vis?.value === "private" ? vis : null;
   return (
     <div
       className={cn(
@@ -147,12 +192,19 @@ export function RepoRow({ r, zebra }: { r: RepoStatus; zebra: boolean }) {
           // both sit in a narrow, predictable width range, so letting them
           // stretch only pushes the eye across empty space.
           "grid grid-cols-[6px_minmax(7rem,13rem)_minmax(0,1fr)] md:grid-cols-[6px_minmax(9rem,15rem)_8.5rem_11rem_minmax(0,1fr)]",
-          "items-center gap-x-3 pr-2 max-w-[64rem]",
+          // `min-h-7` holds the row at the height the bar used to fill, so the
+          // bar below can be shorter than its row.
+          "items-center gap-x-3 pr-2 max-w-[64rem] min-h-7",
         )}
       >
+      {/* Inset a pixel-pair top and bottom rather than filling the row. A
+          full-height bar met its neighbour's, so a run of same-status rows
+          drew one unbroken stripe and no row could be told from the next.
+          The gap is in the bar, not between rows, so the list keeps its
+          density; the corners stay square, per the suite's form rule. */}
       <div
         className={cn(
-          "h-7 w-1.5",
+          "h-6 w-1.5",
           sev === "alert"
             ? "bg-alert"
             : sev === "hold"
@@ -169,6 +221,7 @@ export function RepoRow({ r, zebra }: { r: RepoStatus; zebra: boolean }) {
 
       <div className="min-w-0 flex items-baseline gap-1.5">
         <span className="text-sm text-fg truncate leading-snug">{r.name}</span>
+        {priv && <PrivateLock v={priv} />}
         {r.branch && r.branch !== "main" && (
           <span className="text-[11px] font-mono text-digital shrink-0">{r.branch}</span>
         )}
@@ -197,7 +250,14 @@ export function RepoRow({ r, zebra }: { r: RepoStatus; zebra: boolean }) {
         ) : (
           r.flags.map((f) => <Flag key={f} text={f} remoteKind={r.remoteKind} />)
         )}
-        {r.visibility === "private" && <Flag text="private" remoteKind={r.remoteKind} />}
+        {priv && (
+          <Flag
+            text="private"
+            remoteKind={r.remoteKind}
+            dim={!priv.confirmed}
+            hintOverride={priv.confirmed ? undefined : REMEMBERED_HINT}
+          />
+        )}
       </div>
     </div>
     </div>
