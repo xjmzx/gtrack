@@ -3,17 +3,19 @@ import { getVersion } from "@tauri-apps/api/app";
 import { ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, GitBranch, RefreshCw, TriangleAlert } from "lucide-react";
 import { cn } from "./lib/cn";
 import { loadPrefs, savePrefs, type Prefs } from "./lib/prefs";
-import { loadVisibility, remember, saveVisibility, type VisibilityCache } from "./lib/visibility";
+import { accountMemory, visibilityMemory, type Cache } from "./lib/memory";
 import {
   counts,
   groupSeverity,
   loadConfig,
   matches,
+  scanRepo,
   scanRepos,
   type Filter,
   type RepoStatus,
   type Severity,
   type Tombstone,
+  type Visibility,
 } from "./lib/tauri";
 import { RepoRow } from "./components/RepoRow";
 
@@ -73,7 +75,11 @@ export default function App() {
   const [filter, setFilter] = useState<Filter>("all");
   const [prefs, setPrefs] = useState<Prefs>(loadPrefs);
   const [retired, setRetired] = useState<Tombstone[]>([]);
-  const [visibility, setVisibility] = useState<VisibilityCache>(loadVisibility);
+  const [visibility, setVisibility] = useState<Cache<Visibility>>(visibilityMemory.load);
+  const [accounts, setAccounts] = useState<Cache<string>>(accountMemory.load);
+  /** Rows fetched one at a time since the last full scan, and when. */
+  const [single, setSingle] = useState<Map<string, Date>>(new Map());
+  const [rowBusy, setRowBusy] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     getVersion().then(setAppVersion).catch(() => setAppVersion(null));
@@ -105,16 +111,53 @@ export default function App() {
       // Every scan, not only fetches: a local scan measures nothing, so it
       // keeps each answer, but it is what prunes trees no longer on disk.
       setVisibility((prev) => {
-        const next = remember(prev, rows);
-        saveVisibility(next);
+        const next = visibilityMemory.remember(prev, rows);
+        visibilityMemory.save(next);
         return next;
       });
+      setAccounts((prev) => {
+        const next = accountMemory.remember(prev, rows);
+        accountMemory.save(next);
+        return next;
+      });
+      // A full scan supersedes every single-row fetch before it: the banner's
+      // claim is about this scan now.
+      setSingle(new Map());
       setScannedAt(new Date());
       setWasFetched(fetch);
     } catch (e) {
       setError(String(e));
     } finally {
       setBusy(false);
+    }
+  }, []);
+
+  /** Fetch and rescan one repository, replacing its row in place. */
+  const runOne = useCallback(async (path: string) => {
+    setRowBusy((prev) => new Set(prev).add(path));
+    setError(null);
+    try {
+      const row = await scanRepo(path, true);
+      setRepos((prev) => prev.map((r) => (r.path === path ? row : r)));
+      setVisibility((prev) => {
+        const next = visibilityMemory.rememberOne(prev, row);
+        visibilityMemory.save(next);
+        return next;
+      });
+      setAccounts((prev) => {
+        const next = accountMemory.rememberOne(prev, row);
+        accountMemory.save(next);
+        return next;
+      });
+      setSingle((prev) => new Map(prev).set(path, new Date()));
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setRowBusy((prev) => {
+        const next = new Set(prev);
+        next.delete(path);
+        return next;
+      });
     }
   }, []);
 
@@ -125,6 +168,12 @@ export default function App() {
   }, [run]);
 
   const shown = useMemo(() => repos.filter((r) => matches(r, filter)), [repos, filter]);
+  // Anything scanning at all. Full scans and single rows are kept from
+  // overlapping, so a slow row cannot land on top of a newer full scan.
+  const anyBusy = busy || rowBusy.size > 0;
+  // Verified this session, not remembered: the banner reports what was
+  // measured, and the dimmed keys already speak for the memory.
+  const verified = useMemo(() => repos.filter((r) => r.account === "owner").length, [repos]);
   const total = useMemo(() => counts(repos), [repos]);
 
   const grouped = useMemo(() => {
@@ -227,7 +276,7 @@ export default function App() {
           </div>
           <button
             onClick={() => void run(false)}
-            disabled={busy}
+            disabled={anyBusy}
             title="Re-read local state. No network."
             className="px-2.5 py-1 rounded text-xs font-mono text-fg bg-surfaceHover hover:bg-fg/10 disabled:opacity-40 transition-colors"
           >
@@ -235,7 +284,7 @@ export default function App() {
           </button>
           <button
             onClick={() => void run(true)}
-            disabled={busy}
+            disabled={anyBusy}
             title="Fetch every tracked remote, then rescan"
             className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono text-bg bg-accent hover:bg-accent/90 disabled:opacity-40 transition-colors"
           >
@@ -247,7 +296,12 @@ export default function App() {
 
       {/* Staleness is stated, never implied. Ahead/behind against un-fetched
           refs report pushed commits as unpushed — a confident wrong answer,
-          and the most misleading thing this tool could do. */}
+          and the most misleading thing this tool could do.
+
+          Single-row fetches are counted rather than folded in. They make some
+          rows fresher than the time shown, which is harmless to say; they do
+          not make an unfetched list current, which the amber must keep
+          saying — so a single fetch never turns the banner green. */}
       <div
         className={cn(
           "px-2.5 py-1 text-[11px] font-mono flex items-center gap-1.5 leading-snug",
@@ -258,6 +312,16 @@ export default function App() {
         {wasFetched
           ? `fetched ${scannedAt?.toLocaleTimeString() ?? ""} — ahead/behind current`
           : "local refs only — ahead/behind may be stale"}
+        {single.size > 0 && (
+          <span className="opacity-70">
+            · {single.size} {single.size === 1 ? "repo" : "repos"} fetched alone{wasFetched ? " since" : ""}
+          </span>
+        )}
+        {verified > 0 && (
+          <span className="opacity-70" title="Pinned remotes whose one key is among the keys the owning account publishes on GitHub, checked this session">
+            · {verified} {verified === 1 ? "key" : "keys"} verified
+          </span>
+        )}
       </div>
 
       {error && <div className="px-2.5 py-1 bg-alert/10 text-alert text-[11px] break-all">{error}</div>}
@@ -312,7 +376,19 @@ export default function App() {
                   )}
                 </span>
               </button>
-              {isOpen && rows.map((r, i) => <RepoRow key={r.path} r={r} zebra={i % 2 === 1} visibility={visibility} />)}
+              {isOpen && rows.map((r, i) => (
+                  <RepoRow
+                    key={r.path}
+                    r={r}
+                    zebra={i % 2 === 1}
+                    visibility={visibility}
+                    accounts={accounts}
+                    fetchedAt={single.get(r.path)}
+                    busy={rowBusy.has(r.path)}
+                    locked={anyBusy}
+                    onFetch={(p) => void runOne(p)}
+                  />
+                ))}
             </section>
           );
         })}

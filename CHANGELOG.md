@@ -1,7 +1,24 @@
 # Changelog
 
-## Unreleased
+## v0.1.13
 
+- **A passed account check is shown**, as a small muted-green key beside the
+  name whose hover names the account pushes land on. Until now only a failure
+  drew anything, so a verified row and a row never checked looked identical.
+  A pass is reported only after a successful fetch — a green key beside a red
+  `unreachable` would read as reassurance about a repository nothing was
+  learned about — and no key means *not verified*, never *fine*. Remembered
+  between launches and dimmed until confirmed, like the lock; a later mismatch
+  erases the memory rather than leaving a green key beside `other account`.
+  The fetch banner counts the keys verified this session.
+- **One repository can be fetched on its own**, from a refresh button beside
+  its name — very faint at rest so it can be found, full on hover. It runs every fetch-time check — visibility,
+  account, tags — and replaces the row in place. Rust refuses any path the
+  configured roots do not hold, so the webview cannot point gtrack at an
+  arbitrary directory. A single fetch never turns the banner green: it makes
+  one row fresher, not the list current, so the banner counts rows fetched
+  alone instead, and each such row gives its time on hover. Full and single
+  scans are kept from overlapping.
 - **A pinned remote is checked against the account that owns the repository.**
   A host alias fixes the key, not the account; an alias pointing at the wrong
   key is pinned, reliably, to the wrong identity. During a fetch, the one key

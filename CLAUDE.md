@@ -108,6 +108,18 @@ hesitate to run, which defeats the point of it.
 - **Unpushed tags are asked only after a successful fetch.** A failed fetch
   makes `ls-remote` answer nothing, which compared naively reads as every tag
   unpushed.
+- **`scan_repo` inspects only trees the roots would find.** The path arrives
+  from the webview; matching it against `discover` is what keeps a string from
+  pointing gtrack at any directory on the machine.
+- **A remembered value has three answers, not two.** In `lib/memory.ts` a
+  measurement of *nothing* (`null` — a key on the wrong account) must erase
+  the memory, and *no measurement* (`undefined`) must keep it. Collapsing them
+  either forgets every pass on a launch without a fetch, or keeps a green key
+  beside `other account`. And a single-row update goes through `rememberOne`:
+  the full `remember` prunes anything absent from its list, which for a list
+  of one is everything else.
+- **A single-repo fetch never turns the banner green.** It makes one row
+  fresher, not the list current.
 - **Tombstones match on directory name and nothing else.** A `retired` entry
   whose name is also found in the roots raises the on-disk contradiction. That
   is right when it is the same tree re-cloned, and a false alarm when it is a

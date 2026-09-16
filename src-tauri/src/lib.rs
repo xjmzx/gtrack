@@ -54,11 +54,24 @@ async fn scan_repos(app: AppHandle, fetch: bool) -> Result<Vec<RepoStatus>, Stri
         .map_err(|e| format!("scan failed: {e}"))
 }
 
+/// Rescan one repository, fetching it first if asked.
+///
+/// Refused for any path the configured roots do not hold — see `scan_one`.
+#[tauri::command]
+async fn scan_repo(app: AppHandle, path: String, fetch: bool) -> Result<RepoStatus, String> {
+    let cfg = config::load(&config_dir(&app)?)?;
+    let target = PathBuf::from(&path);
+    tauri::async_runtime::spawn_blocking(move || scan::scan_one(&cfg, &target, fetch))
+        .await
+        .map_err(|e| format!("scan failed: {e}"))?
+        .ok_or_else(|| format!("not a repository under the configured roots: {path}"))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![load_config, save_config, scan_repos])
+        .invoke_handler(tauri::generate_handler![load_config, save_config, scan_repos, scan_repo])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

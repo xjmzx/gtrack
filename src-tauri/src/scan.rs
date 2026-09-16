@@ -50,6 +50,20 @@ pub enum Visibility {
     Private,
 }
 
+/// The result of the account check, when one was made.
+///
+/// Serialised beside `authenticates_as` so a pass is visible and not merely
+/// the absence of a flag — without it a verified row and a row never checked
+/// looked identical, and the check's cost bought nothing anyone could see.
+#[derive(Serialize, Clone, Copy, Debug, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub enum AccountCheck {
+    /// The alias's one key is published by the repository's owner.
+    Owner,
+    /// It is not. Always accompanied by the `other account` flag.
+    Other,
+}
+
 #[derive(Serialize, Clone, Debug, Default)]
 pub struct Versions {
     pub package: Option<String>,
@@ -102,9 +116,11 @@ pub struct RepoStatus {
     /// successful fetch — empty otherwise, which means *not checked* as often
     /// as it means *none*.
     pub unpushed_tags: Vec<String>,
-    /// The account a pinned remote's key belongs to, when that is *not* the
-    /// repository's owner and the account is one this scan saw. Set only
-    /// alongside the `other account` flag.
+    /// `None` when no check was made: no fetch, a remote form whose key is
+    /// not fixed, a host other than GitHub, or an owner publishing no keys.
+    pub account: Option<AccountCheck>,
+    /// The account the key belongs to, when known: the owner on a pass, and
+    /// on a mismatch the other account if this scan saw its keys.
     pub authenticates_as: Option<String>,
     pub flags: Vec<String>,
 }
@@ -657,7 +673,7 @@ fn inspect(path: &Path, root_label: &str, cfg: &Config, fetch: bool, keys: &KeyB
             let owner_repo = owner_repo(&path)?;
             let owner = owner_repo.split('/').next()?;
             (resolve_ssh_host(&host)? == "github.com").then_some(())?;
-            keys.check(&host, owner)
+            keys.check(&host, owner).map(|m| (m, owner.to_string()))
         })
     } else {
         None
@@ -731,7 +747,7 @@ fn inspect(path: &Path, root_label: &str, cfg: &Config, fetch: bool, keys: &KeyB
     } else if let Some(f) = rootedness(remote_kind, upstream.is_some()) {
         flags.push(f.into());
     }
-    for f in remote_flags(fetched, fetch_error.as_deref(), remote_kind, account.as_ref()) {
+    for f in remote_flags(fetched, fetch_error.as_deref(), remote_kind, account.as_ref().map(|(m, _)| m)) {
         flags.push(f.into());
     }
     if !pins_account(remote_kind) {
@@ -761,12 +777,33 @@ fn inspect(path: &Path, root_label: &str, cfg: &Config, fetch: bool, keys: &KeyB
         ahead, behind, dirty, fetched, fetch_error, visibility,
         versions, latest_tag, tag_date, commits_since_tag,
         locks, unpushed_tags,
+        // A pass is reported only when the fetch succeeded. A key matching its
+        // owner while the fetch failed says nothing reassuring about the repo,
+        // and a green key beside a red `unreachable` would read as one.
+        account: match &account {
+            Some((AccountMatch::Owner, _)) if fetched => Some(AccountCheck::Owner),
+            Some((AccountMatch::Other(_), _)) => Some(AccountCheck::Other),
+            _ => None,
+        },
         authenticates_as: match account {
-            Some(AccountMatch::Other(who)) => who,
+            Some((AccountMatch::Owner, owner)) if fetched => Some(owner),
+            Some((AccountMatch::Other(who), _)) => who,
             _ => None,
         },
         flags,
     }
+}
+
+/// Inspect one repository, fetching it first if asked.
+///
+/// Only a tree the configured roots would find is inspected. The path comes
+/// from the webview, and gtrack reading or fetching an arbitrary directory
+/// because a string named it is not a door worth leaving open. `None` when the
+/// path is not one of them.
+pub fn scan_one(cfg: &Config, path: &Path, fetch: bool) -> Option<RepoStatus> {
+    let (found, root_label) = discover(cfg).into_iter().find(|(p, _)| p == path)?;
+    // A key book of its own: one owner's keys, fetched once, then dropped.
+    Some(inspect(&found, &root_label, cfg, fetch, &KeyBook::default()))
 }
 
 /// Scan every configured root. Local inspection is cheap and runs in order;
@@ -927,6 +964,22 @@ mod tests {
     }
 
     #[test]
+    fn a_single_scan_refuses_anything_the_roots_do_not_hold() {
+        let root = std::env::temp_dir().join("gtrack-test-scan-one");
+        let repo = root.join("r");
+        std::fs::create_dir_all(repo.join(".git")).unwrap();
+        let cfg: Config = serde_json::from_value(serde_json::json!({
+            "roots": [root.to_string_lossy()], "groups": []
+        }))
+        .unwrap();
+        assert_eq!(scan_one(&cfg, &repo, false).map(|r| r.name), Some("r".into()));
+        // A real directory, just not one the roots hold.
+        assert!(scan_one(&cfg, &std::env::temp_dir(), false).is_none());
+        assert!(scan_one(&cfg, &root, false).is_none());
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
     fn unpushed_tags_compare_names_and_ignore_peeled_lines() {
         let remote = "b2c1\trefs/tags/v0.1.1\n78ba\trefs/tags/v0.1.1^{}\nf875\trefs/tags/v0.1.10\n";
         assert_eq!(unpushed_tags("v0.1.1\nv0.1.10\nv0.1.12\n", remote), vec!["v0.1.12"]);
@@ -1035,7 +1088,7 @@ mod tests {
             name: "x".into(), path: "/x".into(), group: "g".into(),
             branch: None, upstream: None, remote: None, remote_kind: RemoteKind::None,
             ahead: 0, behind: 0, dirty: 0, fetched: false, fetch_error: None,
-            visibility: Some(Visibility::Private),
+            visibility: Some(Visibility::Private), account: Some(AccountCheck::Owner),
             versions: Versions::default(),
             latest_tag: Some("v1".into()), tag_date: None, commits_since_tag: None,
             locks: vec![], unpushed_tags: vec!["v1".into()], authenticates_as: Some("adjmx".into()),
@@ -1047,6 +1100,7 @@ mod tests {
         }
         assert!(j.get("latest_tag").is_none(), "snake_case key leaked through");
         assert_eq!(j["visibility"], "private");
+        assert_eq!(j["account"], "owner");
     }
 
     #[test]

@@ -1,7 +1,8 @@
-import { Lock } from "lucide-react";
+import { KeyRound, Lock, RefreshCw } from "lucide-react";
 import { cn } from "../lib/cn";
 import { severity, type RemoteKind, type RepoStatus } from "../lib/tauri";
-import { shownVisibility, type ShownVisibility, type VisibilityCache } from "../lib/visibility";
+import { accountMemory, visibilityMemory, type Cache, type Shown } from "../lib/memory";
+import type { Visibility } from "../lib/tauri";
 
 /** A version cell that shows disagreement rather than picking a winner.
  *  A release needs package.json, Cargo.toml and tauri.conf.json bumped
@@ -157,7 +158,7 @@ function Flag({
  *  `md` breakpoint; the name never is. Visibility stays out of the margin bar
  *  on purpose: that bar is status and nothing else, and the group dot rolls it
  *  up — a second meaning in the same strip would break both. */
-function PrivateLock({ v }: { v: ShownVisibility }) {
+function PrivateLock({ v }: { v: Shown<Visibility> }) {
   const label = v.confirmed ? "Private on GitHub" : "Private at the last fetch — not yet confirmed this session";
   return (
     <Lock
@@ -172,10 +173,47 @@ function PrivateLock({ v }: { v: ShownVisibility }) {
   );
 }
 
-export function RepoRow({ r, zebra, visibility }: { r: RepoStatus; zebra: boolean; visibility: VisibilityCache }) {
+/** A passed account check, beside the lock.
+ *
+ *  Muted green and small: a pass is reassurance, not news, and it sits on
+ *  almost every row. Its absence is the information — a pinned GitHub row with
+ *  no key has not been verified, which is not the same as being fine. */
+function VerifiedKey({ a }: { a: Shown<string> }) {
+  const label = a.confirmed
+    ? `Pushes as ${a.value} — this remote's one key is among the keys ${a.value} publishes on GitHub`
+    : `Pushed as ${a.value} at the last fetch — remembered, not yet confirmed this session`;
+  return (
+    <KeyRound
+      size={11}
+      strokeWidth={2.25}
+      className={cn("shrink-0 self-center text-ok/70", !a.confirmed && "opacity-40")}
+      aria-label={label}
+      role="img"
+    >
+      <title>{label}</title>
+    </KeyRound>
+  );
+}
+
+export interface RowProps {
+  r: RepoStatus;
+  zebra: boolean;
+  visibility: Cache<Visibility>;
+  accounts: Cache<string>;
+  /** When this row alone was last fetched, this session. */
+  fetchedAt?: Date;
+  /** A single-repo fetch of this row is running. */
+  busy: boolean;
+  /** Any scan is running — the whole list, or another row. */
+  locked: boolean;
+  onFetch: (path: string) => void;
+}
+
+export function RepoRow({ r, zebra, visibility, accounts, fetchedAt, busy, locked, onFetch }: RowProps) {
   const sev = severity(r);
-  const vis = shownVisibility(r, visibility);
+  const vis = visibilityMemory.shown(r, visibility);
   const priv = vis?.value === "private" ? vis : null;
+  const verified = accountMemory.shown(r, accounts);
   return (
     <div
       className={cn(
@@ -197,7 +235,7 @@ export function RepoRow({ r, zebra, visibility }: { r: RepoStatus; zebra: boolea
                   ? "bg-surface/25"
                   : "",
       )}
-      title={r.path}
+      title={fetchedAt ? `${r.path}\nfetched alone at ${fetchedAt.toLocaleTimeString()}` : r.path}
     >
       <div
         className={cn(
@@ -235,8 +273,30 @@ export function RepoRow({ r, zebra, visibility }: { r: RepoStatus; zebra: boolea
       <div className="min-w-0 flex items-baseline gap-1.5">
         <span className="text-sm text-fg truncate leading-snug">{r.name}</span>
         {priv && <PrivateLock v={priv} />}
+        {verified && <VerifiedKey a={verified} />}
         {r.branch && r.branch !== "main" && (
           <span className="text-[11px] font-mono text-digital shrink-0">{r.branch}</span>
+        )}
+        {/* Fetch this row alone. Very faint at rest — present enough to be
+            discovered without hovering, quiet enough that fifty-odd rows do
+            not read as fifty-odd buttons — full on hover or focus, and held
+            full while it spins. While another scan runs it stays at the faint
+            level rather than vanishing, so the column does not flicker. */}
+        {r.upstream && (
+          <button
+            onClick={() => onFetch(r.path)}
+            disabled={locked}
+            title={fetchedAt ? `Fetch this repo only — last fetched alone at ${fetchedAt.toLocaleTimeString()}` : "Fetch this repo only"}
+            aria-label={`Fetch ${r.name} only`}
+            className={cn(
+              "ml-auto self-center shrink-0 p-0.5 rounded text-muted hover:text-fg hover:bg-fg/10 transition-opacity disabled:cursor-default",
+              busy
+                ? "opacity-100"
+                : "opacity-[0.18] group-hover/row:opacity-100 focus-visible:opacity-100 disabled:!opacity-[0.18]",
+            )}
+          >
+            <RefreshCw size={11} className={busy ? "animate-spin" : ""} />
+          </button>
         )}
       </div>
 

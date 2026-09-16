@@ -48,6 +48,7 @@ function repo(over: Partial<RepoStatus> = {}): RepoStatus {
     commitsSinceTag: null,
     locks: [],
     unpushedTags: [],
+    account: null,
     authenticatesAs: null,
     flags: [],
     ...over,

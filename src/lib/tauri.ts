@@ -12,6 +12,10 @@ export type RemoteKind = "ssh-alias" | "ssh" | "https" | "nostr" | "none";
  *  after a successful fetch; `null` is unknown and is never drawn as either. */
 export type Visibility = "public" | "private";
 
+/** The account check's result. A pass is reported only after a successful
+ *  fetch; `null` means no check was made, never "fine". */
+export type AccountCheck = "owner" | "other";
+
 export interface Versions {
   package: string | null;
   cargo: string | null;
@@ -47,8 +51,9 @@ export interface RepoStatus {
   /** Local tags the tracked remote lacks. Checked only after a successful
    *  fetch, so empty means "none" or "not checked" — the banner says which. */
   unpushedTags: string[];
-  /** The account a pinned remote's key belongs to, when it is not the owner's
-   *  and is one this scan saw. Only ever set beside `other account`. */
+  account: AccountCheck | null;
+  /** The account the key belongs to, when known: the owner on a pass, the
+   *  other account on a mismatch if this scan saw its keys. */
   authenticatesAs: string | null;
   flags: string[];
 }
@@ -98,6 +103,8 @@ export interface Config {
 export const loadConfig = () => invoke<Config>("load_config");
 export const saveConfig = (cfg: Config) => invoke<void>("save_config", { cfg });
 export const scanRepos = (fetch: boolean) => invoke<RepoStatus[]>("scan_repos", { fetch });
+/** One repository. Refused by Rust for any path the configured roots do not hold. */
+export const scanRepo = (path: string, fetch: boolean) => invoke<RepoStatus>("scan_repo", { path, fetch });
 
 /** Which of three lenses a repo falls under.
  *
