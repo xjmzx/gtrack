@@ -16,6 +16,7 @@ use std::sync::OnceLock;
 
 use serde::Serialize;
 
+use crate::account::{AccountMatch, KeyBook};
 use crate::config::Config;
 
 /// How reachable a remote URL is without interactive credentials. A
@@ -97,6 +98,14 @@ pub struct RepoStatus {
     /// running blocks every write while leaving refs valid, so the repo reads
     /// as healthy until something tries to pull.
     pub locks: Vec<String>,
+    /// Local tags the tracked remote does not have. Measured only after a
+    /// successful fetch — empty otherwise, which means *not checked* as often
+    /// as it means *none*.
+    pub unpushed_tags: Vec<String>,
+    /// The account a pinned remote's key belongs to, when that is *not* the
+    /// repository's owner and the account is one this scan saw. Set only
+    /// alongside the `other account` flag.
+    pub authenticates_as: Option<String>,
     pub flags: Vec<String>,
 }
 
@@ -292,19 +301,8 @@ fn owner_repo(path: &str) -> Option<String> {
 /// so an alias is never recognised by its name. `ssh -G` prints the config it
 /// would use without connecting, which is the machine's own answer.
 fn resolve_ssh_host(host: &str) -> Option<String> {
-    let mut cmd = Command::new("ssh");
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        cmd.creation_flags(0x0800_0000);
-    }
-    let out = cmd.args(["-G", host]).stdin(std::process::Stdio::null()).output().ok()?;
-    if !out.status.success() {
-        return None;
-    }
-    String::from_utf8_lossy(&out.stdout)
-        .lines()
-        .find_map(|l| l.strip_prefix("hostname ").map(|h| h.trim().to_ascii_lowercase()))
+    let config = crate::account::ssh_config(host)?;
+    crate::account::config_value(&config, "hostname").map(str::to_ascii_lowercase)
 }
 
 /// `owner/repo` when a remote lives on github.com, however it is spelled.
@@ -543,9 +541,15 @@ fn rootedness(remote_kind: RemoteKind, has_upstream: bool) -> Option<&'static st
 /// tree and leave a tombstone in `gtrack.json`. It stays red until one of them
 /// happens, because the missing thing is the decision.
 fn fetch_failure(stderr: &str, kind: RemoteKind) -> &'static str {
-    if !pins_account(kind) {
-        return "unreachable";
+    if pins_account(kind) && says_not_found(stderr) {
+        "orphan"
+    } else {
+        "unreachable"
     }
+}
+
+/// Whether a failure is the host saying *no such repository*.
+fn says_not_found(stderr: &str) -> bool {
     // Lower-cased once: GitHub capitalises "Repository", GitLab says "project",
     // and the wording drifts between git versions.
     let s = stderr.to_ascii_lowercase();
@@ -555,14 +559,57 @@ fn fetch_failure(stderr: &str, kind: RemoteKind) -> &'static str {
         "the project you were looking for could not be found", // GitLab
         "does not appear to be a git repository",             // path gone entirely
     ];
-    if GONE.iter().any(|needle| s.contains(needle)) {
-        "orphan"
-    } else {
-        "unreachable"
+    GONE.iter().any(|needle| s.contains(needle))
+}
+
+/// The fetch-related flag, once the account check has had its say.
+///
+/// A pinned key that is not the owner's changes what *not found* means: GitHub
+/// hides a private repository from any account without access, in the words
+/// it uses for a deleted one. So a mismatch outranks `orphan` — the repository
+/// is very likely fine, and the key is what is wrong. It does not outrank a
+/// failure that never reached the repository (a refused key, DNS): those stay
+/// `unreachable`, since nothing about the repository was learned.
+///
+/// After a *successful* fetch a mismatch is still worth saying. The key has
+/// access — as a collaborator, say — so reads work and nothing looks wrong,
+/// but every push lands on the other account's profile.
+fn remote_flags(
+    fetched: bool,
+    fetch_error: Option<&str>,
+    kind: RemoteKind,
+    account: Option<&AccountMatch>,
+) -> Vec<&'static str> {
+    let other = matches!(account, Some(AccountMatch::Other(_)));
+    match fetch_error {
+        Some(msg) if other && says_not_found(msg) => vec!["other account"],
+        Some(msg) => vec![fetch_failure(msg, kind)],
+        None if fetched && other => vec!["other account"],
+        None => vec![],
     }
 }
 
-fn inspect(path: &Path, root_label: &str, cfg: &Config, fetch: bool) -> RepoStatus {
+/// Names from `git ls-remote --tags` output, peeled `^{}` lines dropped.
+fn remote_tag_names(ls_remote: &str) -> std::collections::HashSet<&str> {
+    ls_remote
+        .lines()
+        .filter_map(|l| l.split_whitespace().nth(1))
+        .filter_map(|r| r.strip_prefix("refs/tags/"))
+        .filter(|t| !t.ends_with("^{}"))
+        .collect()
+}
+
+/// Local tags absent from the remote, in local order.
+///
+/// By name only. A tag that exists on both sides at different commits is a
+/// different and rarer problem, and naming it `unpushed` would send someone to
+/// push a tag that would be refused.
+fn unpushed_tags(local: &str, ls_remote: &str) -> Vec<String> {
+    let remote = remote_tag_names(ls_remote);
+    local.lines().map(str::trim).filter(|t| !t.is_empty() && !remote.contains(t)).map(str::to_string).collect()
+}
+
+fn inspect(path: &Path, root_label: &str, cfg: &Config, fetch: bool, keys: &KeyBook) -> RepoStatus {
     let name = path.file_name().and_then(|s| s.to_str()).unwrap_or("?").to_string();
     let group = cfg.group_for(&name).unwrap_or(root_label).to_string();
 
@@ -598,6 +645,44 @@ fn inspect(path: &Path, root_label: &str, cfg: &Config, fetch: bool) -> RepoStat
         remote.as_deref().and_then(|u| github_repo(u, remote_kind)).and_then(|r| probe_visibility(&r))
     } else {
         None
+    };
+
+    // Asked whenever a fetch was attempted, failed ones included: a key that
+    // is not the owner's is what turns a pinned *not found* from `orphan` into
+    // `other account`. Pinned aliases only — for any other remote form the key
+    // is not fixed, and `unpinned` already says so.
+    let account = if fetch && remote_kind == RemoteKind::SshAlias && upstream.is_some() {
+        remote.as_deref().and_then(|u| {
+            let (host, path) = split_remote(u)?;
+            let owner_repo = owner_repo(&path)?;
+            let owner = owner_repo.split('/').next()?;
+            (resolve_ssh_host(&host)? == "github.com").then_some(())?;
+            keys.check(&host, owner)
+        })
+    } else {
+        None
+    };
+
+    // Asked of the same remote, with the same authentication, that the fetch
+    // just used — so it works for private repositories and needs no token.
+    // Only after a successful fetch: an empty answer from a failed one would
+    // read as *every tag unpushed*.
+    //
+    // Local tags are read first and the remote is asked only when there are
+    // some. Each ask is a fresh SSH connection costing seconds, and most trees
+    // here have no tags at all — 48 of 62 on the machine this was written on,
+    // whose answers are known without asking.
+    let local_tags = if fetched {
+        git(path, &["for-each-ref", "refs/tags", "--format=%(refname:short)"]).unwrap_or_default()
+    } else {
+        String::new()
+    };
+    let unpushed_tags = if local_tags.trim().is_empty() {
+        Vec::new()
+    } else {
+        git(path, &["ls-remote", "--tags", &remote_name])
+            .map(|listing| unpushed_tags(&local_tags, &listing))
+            .unwrap_or_default()
     };
 
     let (mut ahead, mut behind) = (0u32, 0u32);
@@ -646,8 +731,8 @@ fn inspect(path: &Path, root_label: &str, cfg: &Config, fetch: bool) -> RepoStat
     } else if let Some(f) = rootedness(remote_kind, upstream.is_some()) {
         flags.push(f.into());
     }
-    if let Some(msg) = fetch_error.as_deref() {
-        flags.push(fetch_failure(msg, remote_kind).into());
+    for f in remote_flags(fetched, fetch_error.as_deref(), remote_kind, account.as_ref()) {
+        flags.push(f.into());
     }
     if !pins_account(remote_kind) {
         flags.push("unpinned".into());
@@ -657,6 +742,11 @@ fn inspect(path: &Path, root_label: &str, cfg: &Config, fetch: bool) -> RepoStat
     }
     if ahead > 0 {
         flags.push(format!("{ahead} unpushed"));
+    }
+    match unpushed_tags.len() {
+        0 => {}
+        1 => flags.push("1 unpushed tag".into()),
+        n => flags.push(format!("{n} unpushed tags")),
     }
     if behind > 0 {
         flags.push(format!("{behind} behind"));
@@ -670,7 +760,12 @@ fn inspect(path: &Path, root_label: &str, cfg: &Config, fetch: bool) -> RepoStat
         branch, upstream, remote, remote_kind,
         ahead, behind, dirty, fetched, fetch_error, visibility,
         versions, latest_tag, tag_date, commits_since_tag,
-        locks, flags,
+        locks, unpushed_tags,
+        authenticates_as: match account {
+            Some(AccountMatch::Other(who)) => who,
+            _ => None,
+        },
+        flags,
     }
 }
 
@@ -679,17 +774,21 @@ fn inspect(path: &Path, root_label: &str, cfg: &Config, fetch: bool) -> RepoStat
 /// threads when a fetch is requested.
 pub fn scan(cfg: &Config, fetch: bool) -> Vec<RepoStatus> {
     let repos = discover(cfg);
+    // One per scan: an account's keys are fetched once however many of its
+    // repositories are checked, and never carried over to the next scan.
+    let keys = KeyBook::default();
     if !fetch {
-        return repos.iter().map(|(p, r)| inspect(p, r, cfg, false)).collect();
+        return repos.iter().map(|(p, r)| inspect(p, r, cfg, false, &keys)).collect();
     }
 
     const LANES: usize = 8;
     let mut out: Vec<RepoStatus> = Vec::with_capacity(repos.len());
     std::thread::scope(|s| {
+        let keys = &keys;
         let mut handles = Vec::new();
         for chunk in repos.chunks(repos.len().div_ceil(LANES).max(1)) {
             handles.push(s.spawn(move || {
-                chunk.iter().map(|(p, r)| inspect(p, r, cfg, true)).collect::<Vec<_>>()
+                chunk.iter().map(|(p, r)| inspect(p, r, cfg, true, keys)).collect::<Vec<_>>()
             }));
         }
         for h in handles {
@@ -808,6 +907,38 @@ mod tests {
     }
 
     #[test]
+    fn a_key_that_is_not_the_owners_outranks_orphan_but_not_a_refusal() {
+        let other = AccountMatch::Other(Some("adjmx".into()));
+        let hidden = "ERROR: Repository not found.\nfatal: Could not read from remote repository.";
+        // Hidden from the wrong account: the key is the finding, not the repo.
+        assert_eq!(remote_flags(false, Some(hidden), PINNED, Some(&other)), vec!["other account"]);
+        // Same words, right account: the repository really is gone.
+        assert_eq!(remote_flags(false, Some(hidden), PINNED, Some(&AccountMatch::Owner)), vec!["orphan"]);
+        // Unknown account: exactly the old behaviour.
+        assert_eq!(remote_flags(false, Some(hidden), PINNED, None), vec!["orphan"]);
+        // A refused key never reached a repository; nothing learned about it.
+        let refused = "git@github.com: Permission denied (publickey).";
+        assert_eq!(remote_flags(false, Some(refused), PINNED, Some(&other)), vec!["unreachable"]);
+        // Fetching fine as a collaborator still pushes as someone else.
+        assert_eq!(remote_flags(true, None, PINNED, Some(&other)), vec!["other account"]);
+        assert!(remote_flags(true, None, PINNED, Some(&AccountMatch::Owner)).is_empty());
+        // No fetch attempted: no claim at all.
+        assert!(remote_flags(false, None, PINNED, Some(&other)).is_empty());
+    }
+
+    #[test]
+    fn unpushed_tags_compare_names_and_ignore_peeled_lines() {
+        let remote = "b2c1\trefs/tags/v0.1.1\n78ba\trefs/tags/v0.1.1^{}\nf875\trefs/tags/v0.1.10\n";
+        assert_eq!(unpushed_tags("v0.1.1\nv0.1.10\nv0.1.12\n", remote), vec!["v0.1.12"]);
+        assert!(unpushed_tags("v0.1.1\nv0.1.10\n", remote).is_empty());
+        // No tags anywhere, and a remote with none: every local tag is unpushed.
+        assert!(unpushed_tags("", "").is_empty());
+        assert_eq!(unpushed_tags("v1\n", ""), vec!["v1"]);
+        // A name that is only a prefix of a remote tag is still missing.
+        assert_eq!(unpushed_tags("v0.1\n", remote), vec!["v0.1"]);
+    }
+
+    #[test]
     fn remotes_split_into_host_and_path_in_every_form() {
         let sp = |u: &str| split_remote(u).map(|(h, p)| (h, owner_repo(&p)));
         let gh = |h: &str| Some((h.to_string(), Some("xjmzx/psync".to_string())));
@@ -907,10 +1038,11 @@ mod tests {
             visibility: Some(Visibility::Private),
             versions: Versions::default(),
             latest_tag: Some("v1".into()), tag_date: None, commits_since_tag: None,
-            locks: vec![], flags: vec![],
+            locks: vec![], unpushed_tags: vec!["v1".into()], authenticates_as: Some("adjmx".into()),
+            flags: vec![],
         };
         let j = serde_json::to_value(&r).unwrap();
-        for key in ["latestTag", "tagDate", "commitsSinceTag", "remoteKind", "fetchError"] {
+        for key in ["latestTag", "tagDate", "commitsSinceTag", "remoteKind", "fetchError", "unpushedTags", "authenticatesAs"] {
             assert!(j.get(key).is_some(), "missing camelCase key `{key}` — the webview would read undefined");
         }
         assert!(j.get("latest_tag").is_none(), "snake_case key leaked through");

@@ -8,7 +8,7 @@ function repo(over: Partial<RepoStatus> = {}): RepoStatus {
     remote: "gh:o/r.git", remoteKind: "ssh-alias", ahead: 0, behind: 0, dirty: 0,
     fetched: false, fetchError: null, visibility: null,
     versions: { package: null, cargo: null, tauri: null, lock: null, agree: true },
-    latestTag: null, tagDate: null, commitsSinceTag: null, locks: [], flags: [],
+    latestTag: null, tagDate: null, commitsSinceTag: null, locks: [], unpushedTags: [], authenticatesAs: null, flags: [],
     ...over,
   };
 }

@@ -44,6 +44,12 @@ export interface RepoStatus {
   tagDate: string | null;
   commitsSinceTag: number | null;
   locks: string[];
+  /** Local tags the tracked remote lacks. Checked only after a successful
+   *  fetch, so empty means "none" or "not checked" — the banner says which. */
+  unpushedTags: string[];
+  /** The account a pinned remote's key belongs to, when it is not the owner's
+   *  and is one this scan saw. Only ever set beside `other account`. */
+  authenticatesAs: string | null;
   flags: string[];
 }
 
@@ -121,6 +127,10 @@ const CONFIG_FLAGS = new Set([
   // tombstone. It stays red until one of those is made, which is the point.
   "orphan",
   "unreachable",
+  // A pinned remote whose one key belongs to a different account than the
+  // repository's owner. Red, unlike `unpinned`: that flag says a push *might*
+  // land on the wrong identity, and this one says it *will*.
+  "other account",
   "version mismatch",
 ]);
 

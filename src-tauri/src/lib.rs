@@ -10,6 +10,7 @@
 // one with any side effect at all is an explicit fetch, which touches
 // remote-tracking refs and nothing else.
 
+pub mod account;
 pub mod config;
 pub mod scan;
 

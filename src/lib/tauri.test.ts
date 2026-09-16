@@ -47,6 +47,8 @@ function repo(over: Partial<RepoStatus> = {}): RepoStatus {
     tagDate: null,
     commitsSinceTag: null,
     locks: [],
+    unpushedTags: [],
+    authenticatesAs: null,
     flags: [],
     ...over,
   };
@@ -76,6 +78,13 @@ describe("bucket", () => {
     expect(bucket(repo({ flags: ["no push", "stale lock"] }))).toBe("config");
     expect(bucket(repo({ flags: ["archive", "version mismatch"] }))).toBe("config");
     expect(bucket(repo({ flags: ["unpinned", "orphan"] }))).toBe("config");
+  });
+
+  it("reads a key on the wrong account as a fault and an unpushed tag as work", () => {
+    expect(bucket(repo({ flags: ["other account"] }))).toBe("config");
+    // Work you can finish, like an unpushed commit — and never above a hold.
+    expect(bucket(repo({ flags: ["1 unpushed tag"] }))).toBe("dirty");
+    expect(bucket(repo({ flags: ["no push", "2 unpushed tags"] }))).toBe("hold");
   });
 
   it("keeps a held repo out of dirty, which is the point of the flag", () => {

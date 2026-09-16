@@ -30,7 +30,7 @@ const shortVersion = (v: string) => v.split(/[-+]/)[0];
 const DOT: Record<Severity, { tone: string; hint: string }> = {
   alert: {
     tone: "bg-alert",
-    hint: "Something here is broken — a stale lock, a missing upstream, an unreachable or orphaned remote, or version files that disagree",
+    hint: "Something here is broken — a stale lock, a missing upstream, an unreachable or orphaned remote, a key on the wrong account, or version files that disagree",
   },
   warn: { tone: "bg-warn", hint: "Local work here — uncommitted, unpushed or behind" },
   unpinned: {
@@ -205,7 +205,7 @@ export default function App() {
               [
                 ["all", repos.length, "text-fg", "Everything"],
                 ["clean", total.clean, "text-ok", "Nothing to do"],
-                ["dirty", total.dirty, "text-warn", "Work in progress — uncommitted, unpushed or behind"],
+                ["dirty", total.dirty, "text-warn", "Work in progress — uncommitted, unpushed commits or tags, or behind"],
                 ["unpinned", repos.filter((r) => r.flags.includes("unpinned")).length, "text-mauve", "Remote does not name the account it authenticates as — https, or a bare git@github.com. Use a host alias so pushes land on the right identity"],
                 ["hold", repos.filter((r) => r.flags.includes("no push")).length, "text-mauve", "Declared no-push in gtrack.json — unpushed commits here are expected, not owed. A nostr:// push signs the commit into an event and publishes it to relays"],
                 ["archive", total.archive, "text-muted", "No remote — kept deliberately as a local-only archive"],

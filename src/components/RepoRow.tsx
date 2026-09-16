@@ -25,7 +25,7 @@ function Version({ r }: { r: RepoStatus }) {
   );
 }
 
-const ALERT_FLAGS = new Set(["stale lock", "no upstream", "orphan", "unreachable", "version mismatch"]);
+const ALERT_FLAGS = new Set(["stale lock", "no upstream", "orphan", "unreachable", "version mismatch", "other account"]);
 
 /** Hints for the flags that are faults. `STATE_FLAGS` below carries its own;
  *  these are red either way and only need to say what was actually seen —
@@ -33,6 +33,8 @@ const ALERT_FLAGS = new Set(["stale lock", "no upstream", "orphan", "unreachable
 const ALERT_HINTS: Record<string, string> = {
   orphan:
     "The remote answered: no such repository — deleted, renamed, or not visible to the account this machine authenticates as. Drop the remote to keep it as an archive, or delete the tree and leave a tombstone in gtrack.json",
+  "other account":
+    "The one key this remote's host alias uses is not among the keys the repository's owner publishes on GitHub — every push lands on another account's profile, or is refused. Point the alias at the owner's key",
   unreachable:
     "Fetch failed on network, DNS or credentials — a condition of the moment, not a fact about the remote. On an unpinned remote this includes \"repository not found\": a private repo is hidden from whichever account happened to authenticate, so that answer cannot mean deleted",
 };
@@ -104,6 +106,17 @@ const UNPINNED_HINTS: Partial<Record<RemoteKind, string>> = {
 /** Hint for a visibility the app remembers rather than measured just now. */
 const REMEMBERED_HINT =
   "Private at the last fetch — remembered, not yet confirmed this session. Fetch to check again";
+
+/** Hints computed from the row, for flags whose useful detail is data. */
+function rowHint(text: string, r: RepoStatus): string | undefined {
+  if (text === "other account" && r.authenticatesAs) {
+    return `The one key this remote's host alias uses belongs to ${r.authenticatesAs}, not the repository's owner — every push lands on ${r.authenticatesAs}'s profile, or is refused. Point the alias at the owner's key`;
+  }
+  if (/^\d+ unpushed tags?$/.test(text)) {
+    return `Tags here that the remote does not have: ${r.unpushedTags.join(", ")}. A release tag that was never pushed never builds`;
+  }
+  return undefined;
+}
 
 function Flag({
   text,
@@ -248,7 +261,7 @@ export function RepoRow({ r, zebra, visibility }: { r: RepoStatus; zebra: boolea
         {r.flags.length === 0 ? (
           <Flag text="clean" remoteKind={r.remoteKind} />
         ) : (
-          r.flags.map((f) => <Flag key={f} text={f} remoteKind={r.remoteKind} />)
+          r.flags.map((f) => <Flag key={f} text={f} remoteKind={r.remoteKind} hintOverride={rowHint(f, r)} />)
         )}
         {priv && (
           <Flag

@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+- **A pinned remote is checked against the account that owns the repository.**
+  A host alias fixes the key, not the account; an alias pointing at the wrong
+  key is pinned, reliably, to the wrong identity. During a fetch, the one key
+  the alias names — only when `ssh -G` reports `IdentitiesOnly yes` and a
+  single `IdentityFile` — is compared with the keys the owner publishes at
+  `github.com/<owner>.keys`. No token, and the private key is never read. A
+  mismatch is red `other account`, naming the account the key does belong to
+  when the scan saw it. It also outranks `orphan`: GitHub hides a private
+  repository from the wrong account in the words it uses for a deleted one.
+  An owner that publishes no keys — an organisation — is no evidence either
+  way and draws nothing.
+- **Local tags the remote does not have are flagged**, as `1 unpushed tag` or
+  `N unpushed tags` with the names on hover. Checked with `git ls-remote
+  --tags` over the same remote and authentication as the fetch, so private
+  repositories need no token; only after a successful fetch, and only for
+  trees that have local tags at all.
+
 ## v0.1.12
 
 - **Private repositories are marked beside their name with a lock**, in

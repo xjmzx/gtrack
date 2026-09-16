@@ -101,6 +101,13 @@ hesitate to run, which defeats the point of it.
   thing that makes a refused anonymous read mean *private* rather than *gone*;
   and `private` is a field, never a flag, because any flag `bucket` does not
   know reads as dirty.
+- **The account check names a key only when ssh would.** `IdentitiesOnly yes`
+  and exactly one `IdentityFile`, or no claim — without the first the agent
+  offers its own keys ahead of the file. An owner publishing *no* keys (every
+  organisation) is unknown, never a mismatch.
+- **Unpushed tags are asked only after a successful fetch.** A failed fetch
+  makes `ls-remote` answer nothing, which compared naively reads as every tag
+  unpushed.
 - **Tombstones match on directory name and nothing else.** A `retired` entry
   whose name is also found in the roots raises the on-disk contradiction. That
   is right when it is the same tree re-cloned, and a false alarm when it is a
