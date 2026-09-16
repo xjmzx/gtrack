@@ -36,6 +36,19 @@ pub enum RemoteKind {
     None,
 }
 
+/// Whether the host shows a repository to someone who is not signed in.
+///
+/// Nothing on disk records it, so it is asked of the host — and only after a
+/// fetch has just succeeded, because only then does a refused anonymous read
+/// mean *private* rather than *gone*. A choice, not a finding: it never
+/// becomes a flag, since every flag is something to judge.
+#[derive(Serialize, Clone, Copy, Debug, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub enum Visibility {
+    Public,
+    Private,
+}
+
 #[derive(Serialize, Clone, Debug, Default)]
 pub struct Versions {
     pub package: Option<String>,
@@ -72,6 +85,10 @@ pub struct RepoStatus {
     /// single most important field here.
     pub fetched: bool,
     pub fetch_error: Option<String>,
+    /// `None` whenever it was not measured: no fetch, a failed fetch, a host
+    /// other than GitHub, or a probe that failed for a reason it could not
+    /// name. Unknown is never rendered as either answer.
+    pub visibility: Option<Visibility>,
     pub versions: Versions,
     pub latest_tag: Option<String>,
     pub tag_date: Option<String>,
@@ -94,6 +111,14 @@ pub struct RepoStatus {
 /// It also carries the `PATH` from `child_path` below, which is what lets the
 /// windowed app reach the remote helpers a terminal can already see.
 fn git_cmd(dir: &Path) -> Command {
+    let mut cmd = git_anywhere();
+    cmd.arg("-C").arg(dir);
+    cmd
+}
+
+/// `git_cmd` without a working tree — for the one call that must not read a
+/// repository's config (`probe_visibility`).
+fn git_anywhere() -> Command {
     let mut cmd = Command::new("git");
     #[cfg(windows)]
     {
@@ -107,7 +132,6 @@ fn git_cmd(dir: &Path) -> Command {
     if let Some(path) = CHILD_PATH.get_or_init(child_path) {
         cmd.env("PATH", path);
     }
-    cmd.arg("-C").arg(dir);
     cmd
 }
 
@@ -226,6 +250,130 @@ fn classify_remote(url: &str) -> RemoteKind {
         // `alias:owner/repo.git` or `git@alias:owner/repo.git`.
         RemoteKind::SshAlias
     }
+}
+
+/// Host and path of a remote URL, in whatever form git accepts it.
+///
+/// For the scp-like form the host is whatever sits before the colon, which on
+/// this machine is usually an SSH alias rather than a hostname. That is
+/// resolved separately (`resolve_ssh_host`); this function only splits.
+fn split_remote(url: &str) -> Option<(String, String)> {
+    if let Some((_, rest)) = url.split_once("://") {
+        // `https://host/path`, `ssh://user@host:port/path`.
+        let (authority, path) = rest.split_once('/')?;
+        let host = authority.rsplit('@').next()?;
+        let host = host.split(':').next()?;
+        return Some((host.to_string(), path.to_string()));
+    }
+    // `[user@]host:path`. A local path has no colon before its first slash.
+    let (head, path) = url.split_once(':')?;
+    if head.contains('/') || head.is_empty() {
+        return None;
+    }
+    let host = head.rsplit('@').next()?;
+    Some((host.to_string(), path.to_string()))
+}
+
+/// `owner/repo` from a remote path, or `None` if it is not that shape.
+fn owner_repo(path: &str) -> Option<String> {
+    let path = path.trim_matches('/');
+    let path = path.strip_suffix(".git").unwrap_or(path);
+    let mut parts = path.split('/');
+    let (owner, repo) = (parts.next()?, parts.next()?);
+    if parts.next().is_some() || owner.is_empty() || repo.is_empty() {
+        return None;
+    }
+    Some(format!("{owner}/{repo}"))
+}
+
+/// The hostname an SSH host name resolves to under the machine's own config.
+///
+/// Alias names differ per machine — `github-xjmzx` here is `xjmzx` elsewhere —
+/// so an alias is never recognised by its name. `ssh -G` prints the config it
+/// would use without connecting, which is the machine's own answer.
+fn resolve_ssh_host(host: &str) -> Option<String> {
+    let mut cmd = Command::new("ssh");
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x0800_0000);
+    }
+    let out = cmd.args(["-G", host]).stdin(std::process::Stdio::null()).output().ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .find_map(|l| l.strip_prefix("hostname ").map(|h| h.trim().to_ascii_lowercase()))
+}
+
+/// `owner/repo` when a remote lives on github.com, however it is spelled.
+fn github_repo(url: &str, kind: RemoteKind) -> Option<String> {
+    let (host, path) = split_remote(url)?;
+    let host = match kind {
+        RemoteKind::SshAlias => resolve_ssh_host(&host)?,
+        RemoteKind::Ssh | RemoteKind::Https => host.to_ascii_lowercase(),
+        RemoteKind::Nostr | RemoteKind::None => return None,
+    };
+    (host == "github.com").then(|| owner_repo(&path)).flatten()
+}
+
+/// Read a probe's outcome, positively or not at all.
+///
+/// A readable repository is public. A refusal is private only when it is the
+/// specific refusal of an anonymous request — git wanting a username it is not
+/// allowed to ask for. Anything else (DNS, a timeout, a rate limit) says
+/// nothing about visibility, and guessing either answer from it would be the
+/// confident wrong answer `fetch_failure` is careful not to give.
+fn visibility_from(success: bool, stderr: &str) -> Option<Visibility> {
+    if success {
+        return Some(Visibility::Public);
+    }
+    let s = stderr.to_ascii_lowercase();
+    const ANONYMOUS_REFUSED: &[&str] = &["could not read username", "authentication failed"];
+    ANONYMOUS_REFUSED.iter().any(|n| s.contains(n)).then_some(Visibility::Private)
+}
+
+/// Ask GitHub, without credentials, whether it will show this repository.
+///
+/// GitHub answers an anonymous read of a private repository exactly as it
+/// answers one of a missing repository, so this is only meaningful after the
+/// authenticated fetch has just succeeded — the caller guarantees that.
+///
+/// Every source of credentials is switched off, because one reaching the
+/// request would make a private repository read as public:
+/// - global and system config are replaced by nothing, which drops credential
+///   helpers *and* any `url.*.insteadOf` that would quietly reroute the https
+///   URL over an authenticated ssh connection;
+/// - it runs outside the repository, so that repository's config is not read;
+/// - prompts and askpass programs are disabled, so a refusal fails at once
+///   rather than opening a dialog in front of the window.
+///
+/// `ls-remote` writes nothing anywhere, not even remote-tracking refs, so this
+/// adds no side effect to the one `fetch` already has.
+fn probe_visibility(repo: &str) -> Option<Visibility> {
+    let empty = std::env::temp_dir().join("gtrack-no-such-gitconfig");
+    let out = git_anywhere()
+        .current_dir(std::env::temp_dir())
+        .env("GIT_CONFIG_GLOBAL", &empty)
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .env_remove("GIT_ASKPASS")
+        .env_remove("SSH_ASKPASS")
+        .args([
+            "-c", "credential.helper=",
+            "-c", "core.askPass=",
+            // A stalled transfer gives up instead of holding a scan lane.
+            "-c", "http.lowSpeedLimit=1000",
+            "-c", "http.lowSpeedTime=15",
+            "ls-remote",
+            &format!("https://github.com/{repo}.git"),
+            "HEAD",
+        ])
+        .stdin(std::process::Stdio::null())
+        .output()
+        .ok()?;
+    visibility_from(out.status.success(), &String::from_utf8_lossy(&out.stderr))
 }
 
 /// `version` from a JSON file, without pulling in a schema for the rest of it.
@@ -380,12 +528,24 @@ fn rootedness(remote_kind: RemoteKind, has_upstream: bool) -> Option<&'static st
 /// `could not read from remote repository` that git appends is deliberately
 /// not a signal — it follows a refused key just as readily as a missing repo.
 ///
+/// A remote that does not pin its account never reaches `orphan` at all. Hosts
+/// answer *no such repository* to an account that cannot see a private one,
+/// and an unpinned remote authenticates as whichever key or credential comes
+/// first — so from it that answer means nothing about whether the repository
+/// exists. This is the case that prompted the rule: a private repo on a bare
+/// `git@github.com:` remote, fetched with another account's key, read as
+/// deleted. It still reports `unreachable` and still carries `unpinned`,
+/// whose fix is the one that actually makes the answer trustworthy.
+///
 /// `orphan` is unsettled on purpose, and there are exactly two ways out. Drop
 /// the remote — `git remote remove origin` — and it becomes a derived
 /// `archive`: kept deliberately, contents living nowhere else. Or delete the
 /// tree and leave a tombstone in `gtrack.json`. It stays red until one of them
 /// happens, because the missing thing is the decision.
-fn fetch_failure(stderr: &str) -> &'static str {
+fn fetch_failure(stderr: &str, kind: RemoteKind) -> &'static str {
+    if !pins_account(kind) {
+        return "unreachable";
+    }
     // Lower-cased once: GitHub capitalises "Repository", GitLab says "project",
     // and the wording drifts between git versions.
     let s = stderr.to_ascii_lowercase();
@@ -431,6 +591,14 @@ fn inspect(path: &Path, root_label: &str, cfg: &Config, fetch: bool) -> RepoStat
             Err(e) => fetch_error = Some(e.to_string()),
         }
     }
+
+    // Only after a successful fetch: that is what turns a refused anonymous
+    // read into *private* rather than *gone or unreachable*.
+    let visibility = if fetched {
+        remote.as_deref().and_then(|u| github_repo(u, remote_kind)).and_then(|r| probe_visibility(&r))
+    } else {
+        None
+    };
 
     let (mut ahead, mut behind) = (0u32, 0u32);
     if let Some(up) = upstream.as_deref() {
@@ -479,7 +647,7 @@ fn inspect(path: &Path, root_label: &str, cfg: &Config, fetch: bool) -> RepoStat
         flags.push(f.into());
     }
     if let Some(msg) = fetch_error.as_deref() {
-        flags.push(fetch_failure(msg).into());
+        flags.push(fetch_failure(msg, remote_kind).into());
     }
     if !pins_account(remote_kind) {
         flags.push("unpinned".into());
@@ -500,7 +668,7 @@ fn inspect(path: &Path, root_label: &str, cfg: &Config, fetch: bool) -> RepoStat
     RepoStatus {
         name, path: path.display().to_string(), group,
         branch, upstream, remote, remote_kind,
-        ahead, behind, dirty, fetched, fetch_error,
+        ahead, behind, dirty, fetched, fetch_error, visibility,
         versions, latest_tag, tag_date, commits_since_tag,
         locks, flags,
     }
@@ -608,6 +776,8 @@ mod tests {
         assert_eq!(rootedness(RemoteKind::Ssh, true), None);
     }
 
+    const PINNED: RemoteKind = RemoteKind::SshAlias;
+
     #[test]
     fn a_deleted_remote_is_not_a_dropped_connection() {
         // The exact stderr from the case that prompted this: an SSH alias that
@@ -615,26 +785,79 @@ mod tests {
         assert_eq!(
             fetch_failure(
                 "ERROR: Repository not found.\nfatal: Could not read from remote repository.\n\n\
-                 Please make sure you have the correct access rights\nand the repository exists."
+                 Please make sure you have the correct access rights\nand the repository exists.",
+                PINNED
             ),
             "orphan"
         );
-        assert_eq!(fetch_failure("remote: The project you were looking for could not be found."), "orphan");
-        assert_eq!(fetch_failure("fatal: '/srv/git/x.git' does not appear to be a git repository"), "orphan");
+        assert_eq!(fetch_failure("remote: The project you were looking for could not be found.", PINNED), "orphan");
+        assert_eq!(fetch_failure("fatal: '/srv/git/x.git' does not appear to be a git repository", PINNED), "orphan");
+    }
+
+    #[test]
+    fn an_unpinned_remote_cannot_prove_a_repository_is_gone() {
+        // psync: private, on a bare git@github.com remote, fetched with another
+        // account's key. GitHub hides it from that account in the same words it
+        // uses for a deleted repository.
+        let hidden = "ERROR: Repository not found.\nfatal: Could not read from remote repository.";
+        assert_eq!(fetch_failure(hidden, RemoteKind::Ssh), "unreachable");
+        assert_eq!(fetch_failure(hidden, RemoteKind::Https), "unreachable");
+        assert_eq!(fetch_failure(hidden, RemoteKind::Nostr), "unreachable");
+        // Pinned, the same words are a fact about the remote.
+        assert_eq!(fetch_failure(hidden, PINNED), "orphan");
+    }
+
+    #[test]
+    fn remotes_split_into_host_and_path_in_every_form() {
+        let sp = |u: &str| split_remote(u).map(|(h, p)| (h, owner_repo(&p)));
+        let gh = |h: &str| Some((h.to_string(), Some("xjmzx/psync".to_string())));
+        assert_eq!(sp("git@github.com:xjmzx/psync.git"), gh("github.com"));
+        assert_eq!(sp("https://github.com/xjmzx/psync"), gh("github.com"));
+        assert_eq!(sp("https://github.com/xjmzx/psync.git/"), gh("github.com"));
+        assert_eq!(sp("ssh://git@github.com:22/xjmzx/psync.git"), gh("github.com"));
+        // An alias splits to the alias; resolving it is ssh's job, not ours.
+        assert_eq!(sp("github-xjmzx:xjmzx/psync.git"), gh("github-xjmzx"));
+        assert_eq!(sp("git@xjmzx:xjmzx/psync.git"), gh("xjmzx"));
+        // A local path is not a host.
+        assert_eq!(split_remote("/srv/git/x.git"), None);
+        // Not owner/repo: no probe.
+        assert_eq!(owner_repo("group/sub/repo.git"), None);
+        assert_eq!(owner_repo("repo.git"), None);
+    }
+
+    #[test]
+    fn github_is_recognised_by_host_and_nothing_else_is_probed() {
+        assert_eq!(github_repo("https://github.com/o/r.git", RemoteKind::Https).as_deref(), Some("o/r"));
+        assert_eq!(github_repo("git@github.com:o/r.git", RemoteKind::Ssh).as_deref(), Some("o/r"));
+        assert_eq!(github_repo("https://gitlab.com/o/r.git", RemoteKind::Https), None);
+        assert_eq!(github_repo("nostr://npub1abc/relay/r", RemoteKind::Nostr), None);
+    }
+
+    #[test]
+    fn visibility_is_read_positively_or_left_unknown() {
+        assert_eq!(visibility_from(true, ""), Some(Visibility::Public));
+        // The exact refusal of an anonymous read, captured from GitHub.
+        assert_eq!(
+            visibility_from(false, "fatal: could not read Username for 'https://github.com': terminal prompts disabled"),
+            Some(Visibility::Private)
+        );
+        // Failures that say nothing about who may read it stay unknown.
+        assert_eq!(visibility_from(false, "fatal: unable to access 'https://github.com/o/r.git/': Could not resolve host: github.com"), None);
+        assert_eq!(visibility_from(false, ""), None);
     }
 
     #[test]
     fn a_failure_that_will_look_different_in_an_hour_stays_unreachable() {
-        assert_eq!(fetch_failure("ssh: Could not resolve hostname github.com"), "unreachable");
-        assert_eq!(fetch_failure("ssh: connect to host github.com port 22: Operation timed out"), "unreachable");
+        assert_eq!(fetch_failure("ssh: Could not resolve hostname github.com", PINNED), "unreachable");
+        assert_eq!(fetch_failure("ssh: connect to host github.com port 22: Operation timed out", PINNED), "unreachable");
         // A refused key carries the same generic second line as a missing repo.
         // Matching on that line would turn every unloaded agent into an orphan.
         assert_eq!(
-            fetch_failure("git@github.com: Permission denied (publickey).\nfatal: Could not read from remote repository."),
+            fetch_failure("git@github.com: Permission denied (publickey).\nfatal: Could not read from remote repository.", PINNED),
             "unreachable"
         );
         // Nothing recognised at all: the conservative direction, not a guess.
-        assert_eq!(fetch_failure("fetch failed"), "unreachable");
+        assert_eq!(fetch_failure("fetch failed", PINNED), "unreachable");
     }
 
     #[test]
@@ -681,6 +904,7 @@ mod tests {
             name: "x".into(), path: "/x".into(), group: "g".into(),
             branch: None, upstream: None, remote: None, remote_kind: RemoteKind::None,
             ahead: 0, behind: 0, dirty: 0, fetched: false, fetch_error: None,
+            visibility: Some(Visibility::Private),
             versions: Versions::default(),
             latest_tag: Some("v1".into()), tag_date: None, commits_since_tag: None,
             locks: vec![], flags: vec![],
@@ -690,6 +914,7 @@ mod tests {
             assert!(j.get(key).is_some(), "missing camelCase key `{key}` — the webview would read undefined");
         }
         assert!(j.get("latest_tag").is_none(), "snake_case key leaked through");
+        assert_eq!(j["visibility"], "private");
     }
 
     #[test]

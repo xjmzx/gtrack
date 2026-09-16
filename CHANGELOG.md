@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+- **Private GitHub repositories carry a `private` chip.** Visibility is not on
+  disk, so after a successful fetch gtrack asks GitHub for the repository
+  anonymously over https: readable is public, a refused anonymous read is
+  private, and any other failure leaves it unknown and undrawn. The request is
+  a `git ls-remote` with every credential source switched off — global and
+  system config, the repository's own config, helpers, askpass and prompts —
+  since one leaking in would make a private repo read as public, and an
+  `insteadOf` rewrite would reroute it over ssh. Aliases are recognised by
+  resolving them with `ssh -G`, never by name. It is a field beside the flags,
+  not a flag: every flag feeds `bucket`, and private is a choice rather than a
+  finding.
+- **An unpinned remote can no longer produce `orphan`.** GitHub tells an
+  account that cannot see a private repository that it does not exist, in the
+  same words it uses for a deleted one. A bare `git@github.com:` remote
+  authenticates as whichever key ssh-agent offers first, so psync — private,
+  and fetched with another account's key — read as deleted. From a remote that
+  does not pin its account, *not found* now stays `unreachable`, beside the
+  `unpinned` flag whose fix makes the answer trustworthy.
+- **jmzx.uk is a group**, beside fizx.uk and upleb.uk.
+
 ## v0.1.11
 
 - **Remote helpers resolve in the windowed app.** A remote whose scheme git

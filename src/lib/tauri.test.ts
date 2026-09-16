@@ -41,6 +41,7 @@ function repo(over: Partial<RepoStatus> = {}): RepoStatus {
     dirty: 0,
     fetched: false,
     fetchError: null,
+    visibility: null,
     versions: { package: null, cargo: null, tauri: null, lock: null, agree: true },
     latestTag: null,
     tagDate: null,
@@ -90,6 +91,19 @@ describe("bucket", () => {
     expect(bucket(repo({ flags: ["unpinned"] }))).toBe("unpinned");
     expect(bucket(repo({ flags: ["unpinned", "2 behind"] }))).toBe("unpinned");
     expect(bucket(repo({ flags: ["2 behind"] }))).toBe("dirty");
+  });
+});
+
+describe("visibility", () => {
+  it("never moves a repo out of its bucket", () => {
+    // It travels beside the flags rather than among them, because any flag
+    // `bucket` does not know reads as dirty. A private repo is a choice.
+    for (const s of ALL_SEVERITIES) {
+      const priv = { ...BY_SEVERITY[s], visibility: "private" as const };
+      expect(bucket(priv)).toBe(bucket(BY_SEVERITY[s]));
+      expect(severity(priv)).toBe(s);
+    }
+    expect(counts([repo({ visibility: "private" })]).clean).toBe(1);
   });
 });
 

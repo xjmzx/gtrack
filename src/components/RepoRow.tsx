@@ -32,7 +32,7 @@ const ALERT_HINTS: Record<string, string> = {
   orphan:
     "The remote answered: no such repository — deleted, renamed, or not visible to the account this machine authenticates as. Drop the remote to keep it as an archive, or delete the tree and leave a tombstone in gtrack.json",
   unreachable:
-    "Fetch failed on network, DNS or credentials — a condition of the moment, not a fact about the remote",
+    "Fetch failed on network, DNS or credentials — a condition of the moment, not a fact about the remote. On an unpinned remote this includes \"repository not found\": a private repo is hidden from whichever account happened to authenticate, so that answer cannot mean deleted",
 };
 
 /** Flags that describe how a repository is set up rather than reporting a
@@ -69,6 +69,12 @@ const STATE_FLAGS: Record<string, { tone: string; hint: string }> = {
   "no push": {
     tone: "bg-mauve text-bg font-semibold",
     hint: "Declared no-push in gtrack.json. Unpushed commits here are expected rather than owed — pushing a nostr:// remote signs the commit into an event with nostr.nsec and publishes it to relays, where it cannot be recalled",
+  },
+  // Grey with `archive`: a settled choice that asks for nothing. Drawn beside
+  // the flags, never among them — see `visibility` in lib/tauri.ts.
+  private: {
+    tone: "bg-muted/15 text-muted",
+    hint: "Private on GitHub — the fetch succeeded, and the same repository refused a read without credentials. Checked on each fetch",
   },
   unpinned: {
     tone: "bg-mauve/15 text-mauve",
@@ -191,6 +197,7 @@ export function RepoRow({ r, zebra }: { r: RepoStatus; zebra: boolean }) {
         ) : (
           r.flags.map((f) => <Flag key={f} text={f} remoteKind={r.remoteKind} />)
         )}
+        {r.visibility === "private" && <Flag text="private" remoteKind={r.remoteKind} />}
       </div>
     </div>
     </div>

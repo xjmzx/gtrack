@@ -46,8 +46,10 @@ fn main() {
             .unwrap_or_else(|| "—".into());
         let tag = r.latest_tag.clone().unwrap_or_else(|| "untagged".into());
         let since = r.commits_since_tag.filter(|n| *n > 0).map(|n| format!("+{n}")).unwrap_or_default();
+        // Beside the flags, not among them: private is not a finding.
+        let private = if r.visibility == Some(gtrack_lib::scan::Visibility::Private) { " · private" } else { "" };
         println!(
-            "  {:<24} {:<14} {:<18} {:<4} {}",
+            "  {:<24} {:<14} {:<18} {:<4} {}{private}",
             r.name, v, tag, since,
             if r.flags.is_empty() { "clean".to_string() } else { r.flags.join(", ") }
         );

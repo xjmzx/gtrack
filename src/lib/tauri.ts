@@ -8,6 +8,10 @@ import { invoke } from "@tauri-apps/api/core";
 
 export type RemoteKind = "ssh-alias" | "ssh" | "https" | "nostr" | "none";
 
+/** Whether GitHub shows the repository to someone not signed in. Measured only
+ *  after a successful fetch; `null` is unknown and is never drawn as either. */
+export type Visibility = "public" | "private";
+
 export interface Versions {
   package: string | null;
   cargo: string | null;
@@ -32,6 +36,9 @@ export interface RepoStatus {
   /** Whether ahead/behind were computed against freshly fetched refs. */
   fetched: boolean;
   fetchError: string | null;
+  /** Not a flag, deliberately: every flag feeds `bucket`, and an unrecognised
+   *  one lands in `dirty`. Private is a choice, not something to act on. */
+  visibility: Visibility | null;
   versions: Versions;
   latestTag: string | null;
   tagDate: string | null;

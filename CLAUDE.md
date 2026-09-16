@@ -90,6 +90,17 @@ hesitate to run, which defeats the point of it.
   load-bearing: an orphan left as `unreachable` is only the status quo, where a
   blip mislabelled `orphan` is the confident wrong answer this tool exists not
   to give.
+- **`orphan` needs a pinned remote as well as a positive match.** GitHub says
+  *repository not found* to any account that cannot see a private repo, and an
+  unpinned remote authenticates as whoever comes first. psync — private, on a
+  bare `git@github.com:` — read as deleted for exactly that reason.
+- **The visibility probe must not find a credential.** It runs with global,
+  system and repository config all out of reach and prompts disabled. One
+  helper or `insteadOf` rule getting through makes every private repo read as
+  public, silently. It runs only after a successful fetch, which is the only
+  thing that makes a refused anonymous read mean *private* rather than *gone*;
+  and `private` is a field, never a flag, because any flag `bucket` does not
+  know reads as dirty.
 - **Tombstones match on directory name and nothing else.** A `retired` entry
   whose name is also found in the roots raises the on-disk contradiction. That
   is right when it is the same tree re-cloned, and a false alarm when it is a
