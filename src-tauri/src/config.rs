@@ -179,9 +179,13 @@ fn default_groups() -> Vec<Group> {
                 .map(|s| s.to_string())
                 .collect(),
         },
-        // The two website sets. They were root headings until the roots became
+        // The website sets. They were root headings until the roots became
         // one-per-identity; as groups they say the true thing, which is that a
         // domain is a set of repositories and not a place on disk.
+        Group {
+            label: "jmzx.uk".into(),
+            repos: ["jmzx.uk"].iter().map(|s| s.to_string()).collect(),
+        },
         Group {
             label: "fizx.uk".into(),
             repos: [
@@ -403,6 +407,7 @@ mod tests {
         let c = Config::default();
         assert_eq!(c.group_for("relay.fizx.uk"), Some("fizx.uk"));
         assert_eq!(c.group_for("blst.upleb.uk"), Some("upleb.uk"));
+        assert_eq!(c.group_for("jmzx.uk"), Some("jmzx.uk"));
     }
 
     #[test]
