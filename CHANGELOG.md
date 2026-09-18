@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.1.15
+
+- **The chrome is achromatic.** gtrack is a co-developed tool rather than a
+  project, and its chrome now says so: ground, surfaces, text, the wordmark,
+  the version chip and the fetch button are neutral grey and white. Colour is
+  spent only where it means something — repo states, `private`, the banners.
+  The greys keep the old navy scheme's luma; secondary text sits brighter, as
+  a grey needs contrast where the blue-grey had hue. A branch name is grey
+  rather than blue, which means *private*.
+- **The chips carry the state; the rows no longer do.** Rows lose their state
+  tint and keep only zebra banding, now a little stronger. Local-work chips
+  (`dirty`, `behind`, `unpushed`) take an amber fill and text, as `clean`
+  takes green — mauve on a no-push repo, where that work is expected.
+- **Each group is bracketed.** The first and last margin bar of a group have
+  their outer corner cut at 45°, a lone repo's both; the retired list too.
+- **Group counts are boxed**, each in a faint fill of its own tone with the
+  number at full strength, not only the alert count.
+- **Fainter type is lifted** — the per-row fetch button (0.18 → 0.55 at rest),
+  inactive filter counts, tags, `untagged`, the version chip and the footer.
+
 ## v0.1.14
 
 - **A git that cannot run stops the scan instead of describing it.** Every
