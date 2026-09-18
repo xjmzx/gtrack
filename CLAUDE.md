@@ -11,8 +11,14 @@ gtrack is not an n-suite app. The naming says which is which: `n*` apps
 (ndisc, nview, nplay…) follow the suite's design rules strictly; an app that
 starts from an n-suite design and takes another letter — `g` here — may derive
 its own. So a SUITE.md design rule is a default for gtrack, and departing from
-it on purpose is allowed. The margin bar's 45° group ends break the
-square-corner rule, deliberately.
+it on purpose is allowed. Departures so far:
+
+- **The chrome is achromatic (2026-09-19).** Colour is reserved for syntax —
+  repo states, `private`, the banners — and everything else is neutral grey:
+  ground, surfaces, text, wordmark, the primary button. This is what marks
+  gtrack as a co-developed *tool* rather than a project. A new colour in the
+  chrome is a regression; the palette note in `src/index.css` has the detail.
+- **The margin bar's 45° group ends** break the square-corner rule.
 
 The platform notes are another matter. Still read it **before making a
 platform-sensitive choice**: it records constraints invisible on the machine

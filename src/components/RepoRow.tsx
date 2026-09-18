@@ -10,7 +10,7 @@ import type { Visibility } from "../lib/tauri";
 function Version({ r }: { r: RepoStatus }) {
   const { versions: v } = r;
   const all = [v.package, v.cargo, v.tauri, v.lock].filter(Boolean) as string[];
-  if (all.length === 0) return <span className="text-muted/30">—</span>;
+  if (all.length === 0) return <span className="text-muted/60">—</span>;
   if (v.agree) return <span className="text-fg">{all[0]}</span>;
   // Four sources now, so show the distinct values rather than one per file —
   // "0.1.1 / 0.1.0" is the finding; repeating the agreeing value three times
@@ -44,7 +44,7 @@ const ALERT_HINTS: Record<string, string> = {
  *  fault, each with its own tone and none of them red.
  *
  *  `archive` is grey: where the repo lives, nothing wrong with it. `unpinned`
- *  takes the mauve of `track` in the wordmark — visible but not shouted, since
+ *  takes mauve in its faint-fill form — visible but not shouted, since
  *  such a remote fetches and usually pushes perfectly well. */
 const STATE_FLAGS: Record<string, { tone: string; hint: string }> = {
   archive: {
@@ -124,17 +124,26 @@ function Flag({
   remoteKind,
   hintOverride,
   dim = false,
+  held = false,
 }: {
   text: string;
   remoteKind: RemoteKind;
   hintOverride?: string;
   /** Remembered rather than measured this session. */
   dim?: boolean;
+  /** The repo is declared no-push. */
+  held?: boolean;
 }) {
   const state = STATE_FLAGS[text];
+  // Anything not an alert and not a named state is local work — dirty,
+  // unpushed, behind — and wears the amber of the `dirty` state, faint fill
+  // and full text, the way `clean` wears its green. The chip carries the
+  // state now that the row no longer does. On a held repo the same work is
+  // expected rather than owed, so it takes the hold mauve instead: amber
+  // there would read as a chore, which the declaration exists to undo.
   const tone = ALERT_FLAGS.has(text)
     ? "bg-alert/20 text-alert"
-    : (state?.tone ?? "bg-surfaceHover/70 text-fg/70");
+    : (state?.tone ?? (held ? "bg-mauve/15 text-mauve" : "bg-warn/15 text-warn"));
   // A per-remote override first, then the flag's own hint, then the alert
   // table — a chip with nothing to say still renders, it just has no title.
   const hint =
@@ -240,20 +249,12 @@ export function RepoRow({ r, zebra, first, last, visibility, accounts, fetchedAt
         // The tint spans the full window while the columns stop at the cap —
         // banding that stopped mid-screen read as a rendering fault.
         "group/row hover:bg-surfaceHover/50 transition-colors",
-        // An archive takes the plain zebra: it is a settled state, and tinting
-        // it would put it back among the rows that want doing something about.
-        // https gets a tint faint enough to find but not to alarm.
-        sev === "alert"
-          ? "bg-alert/[0.07]"
-          : sev === "hold"
-            ? "bg-mauve/[0.07]"
-            : sev === "warn"
-              ? "bg-warn/[0.05]"
-              : sev === "unpinned"
-                ? "bg-mauve/[0.05]"
-                : zebra
-                  ? "bg-surface/25"
-                  : "",
+        // Zebra only. Rows were tinted by state until 2026-09-19; on the grey
+        // chrome a 5% amber over near-black read as mud rather than a colour,
+        // and the state is already said twice — the margin bar and the chip,
+        // which now carries its state's tone. Stronger banding than before,
+        // since it is the only thing separating rows now.
+        zebra && "bg-surface/40",
       )}
       title={fetchedAt ? `${r.path}\nfetched alone at ${fetchedAt.toLocaleTimeString()}` : r.path}
     >
@@ -296,10 +297,12 @@ export function RepoRow({ r, zebra, first, last, visibility, accounts, fetchedAt
         {priv && <PrivateLock v={priv} />}
         {verified && <VerifiedKey a={verified} />}
         {r.branch && r.branch !== "main" && (
-          <span className="text-[11px] font-mono text-digital shrink-0">{r.branch}</span>
+          // Grey, not `digital`: that blue means *private*, and a branch name
+          // is information, not a state. The mono face sets it apart.
+          <span className="text-[11px] font-mono text-fg/60 shrink-0">{r.branch}</span>
         )}
         {/* Fetch this row alone. Faint at rest — present enough to be
-            discovered without hovering (0.18 was not), quiet enough that fifty-odd rows do
+            discovered without hovering (0.18 and 0.35 were not), quiet enough that fifty-odd rows do
             not read as fifty-odd buttons — full on hover or focus, and held
             full while it spins. While another scan runs it stays at the faint
             level rather than vanishing, so the column does not flicker. */}
@@ -313,7 +316,7 @@ export function RepoRow({ r, zebra, first, last, visibility, accounts, fetchedAt
               "ml-auto self-center shrink-0 p-0.5 rounded text-muted hover:text-fg hover:bg-fg/10 transition-opacity disabled:cursor-default",
               busy
                 ? "opacity-100"
-                : "opacity-[0.35] group-hover/row:opacity-100 focus-visible:opacity-100 disabled:!opacity-[0.35]",
+                : "opacity-[0.55] group-hover/row:opacity-100 focus-visible:opacity-100 disabled:!opacity-[0.55]",
             )}
           >
             <RefreshCw size={11} className={busy ? "animate-spin" : ""} />
@@ -327,14 +330,14 @@ export function RepoRow({ r, zebra, first, last, visibility, accounts, fetchedAt
 
       {/* Release position. First to go as the window narrows — it is
           reference, where the flags are the reason to look. */}
-      <div className="hidden md:block font-mono text-[11px] text-muted truncate leading-snug">
+      <div className="hidden md:block font-mono text-[11px] text-fg/60 truncate leading-snug">
         {r.latestTag ? (
           <>
             {r.latestTag}
             {r.commitsSinceTag ? <span className="text-warn font-semibold"> +{r.commitsSinceTag}</span> : null}
           </>
         ) : (
-          <span className="text-muted/30">untagged</span>
+          <span className="text-muted/60">untagged</span>
         )}
       </div>
 
@@ -342,7 +345,9 @@ export function RepoRow({ r, zebra, first, last, visibility, accounts, fetchedAt
         {r.flags.length === 0 ? (
           <Flag text="clean" remoteKind={r.remoteKind} />
         ) : (
-          r.flags.map((f) => <Flag key={f} text={f} remoteKind={r.remoteKind} hintOverride={rowHint(f, r)} />)
+          r.flags.map((f) => (
+            <Flag key={f} text={f} remoteKind={r.remoteKind} hintOverride={rowHint(f, r)} held={sev === "hold"} />
+          ))
         )}
         {priv && (
           <Flag

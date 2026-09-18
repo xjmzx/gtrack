@@ -3,16 +3,27 @@
 @tailwind utilities;
 
 /* Theme palettes — channel triples consumed by tailwind.config.ts as
-   rgb(var(--c-x) / <alpha-value>). :root is the fizx.uk scheme (navy
-   base, emerald + violet accents); .theme-upleb — toggled by the title
-   button — swaps to the upleb.uk orange scheme. Mirrors ndisc. */
+   rgb(var(--c-x) / <alpha-value>). Token names mirror ndisc.
+
+   Achromatic apart from syntax (2026-09-19). A co-developed tool is told
+   apart from the projects by its chrome: everything that is not saying
+   something — ground, surfaces, text, the wordmark, the primary button — is
+   neutral grey, and colour is spent only where it carries meaning: a repo's
+   state (ok / warn / alert / mauve), `digital` for private, and the banners.
+   The ground greys keep the luma of the navy scheme they replace; `muted`
+   sits brighter than its navy original (140 against ~120), because a grey
+   with no hue to separate it from the ground needs the contrast instead. A new colour in the chrome is a
+   regression; a new state wants one of the existing tones.
+
+   `accent` is kept only so the token set stays whole — nothing uses it now.
+   .theme-upleb below predates this and is not switched to by anything. */
 :root {
-  --c-bg: 9 13 18;
-  --c-panel: 13 17 23;
-  --c-surface: 19 29 42;
-  --c-surface-hover: 30 45 61;
-  --c-fg: 240 246 252;
-  --c-muted: 107 122 141;
+  --c-bg: 12 12 12;
+  --c-panel: 17 17 17;
+  --c-surface: 28 28 28;
+  --c-surface-hover: 43 43 43;
+  --c-fg: 245 245 245;
+  --c-muted: 140 140 140;
   --c-accent: 122 240 205;
   --c-digital: 125 211 252;
   --c-ok: 74 222 128;

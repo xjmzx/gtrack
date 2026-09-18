@@ -239,14 +239,16 @@ export default function App() {
   return (
     <div className="min-h-full flex flex-col">
       <header className="flex items-center gap-2 px-2.5 py-1.5 border-b border-surface/60">
-        <GitBranch size={16} className="text-accent shrink-0" />
+        {/* Two-tone in grey: the wordmark keeps its g / track split, but
+            mauve means a state in the rows below and cannot also be a logo. */}
+        <GitBranch size={16} className="text-fg shrink-0" />
         <span className="text-base font-bold tracking-tight select-none">
-          <span className="text-accent">g</span>
-          <span className="text-mauve">track</span>
+          <span className="text-fg">g</span>
+          <span className="text-muted">track</span>
         </span>
         {appVersion && (
           <span
-            className="hidden lg:inline-flex items-center px-1.5 py-0.5 rounded bg-surface text-mauve font-mono text-[10px] shrink-0"
+            className="hidden lg:inline-flex items-center px-1.5 py-0.5 rounded bg-surfaceHover text-fg/80 font-mono text-[10px] shrink-0"
             title={`v${appVersion}`}
           >
             v{shortVersion(appVersion)}
@@ -282,11 +284,11 @@ export default function App() {
                 title={hint}
                 className={cn(
                   "px-2 py-1 text-xs font-mono transition-colors",
-                  filter === key ? "bg-surfaceHover text-fg" : "text-muted hover:text-fg hover:bg-fg/5",
+                  filter === key ? "bg-surfaceHover text-fg" : "text-fg/70 hover:text-fg hover:bg-fg/5",
                 )}
               >
                 {key}
-                <span className={cn("ml-1 tabular-nums", filter === key ? tone : "text-muted/50")}>{n}</span>
+                <span className={cn("ml-1 tabular-nums", filter === key ? tone : "text-fg/55")}>{n}</span>
               </button>
             ))}
           </div>
@@ -302,7 +304,7 @@ export default function App() {
             onClick={() => void run(true)}
             disabled={anyBusy}
             title="Fetch every tracked remote, then rescan"
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono text-bg bg-accent hover:bg-accent/90 disabled:opacity-40 transition-colors"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono text-bg bg-fg hover:bg-fg/85 disabled:opacity-40 transition-colors"
           >
             <RefreshCw size={11} className={busy ? "animate-spin" : ""} />
             fetch
@@ -450,7 +452,7 @@ export default function App() {
                     key={t.name}
                     className={cn(
                       "group/row hover:bg-surfaceHover/50 transition-colors",
-                      here ? "bg-alert/[0.07]" : i % 2 === 1 ? "bg-surface/25" : "",
+                      i % 2 === 1 && "bg-surface/40",
                     )}
                   >
                     <div className="grid grid-cols-[6px_minmax(7rem,13rem)_minmax(0,1fr)] md:grid-cols-[6px_minmax(9rem,15rem)_8.5rem_minmax(0,1fr)] items-center gap-x-3 pr-2 max-w-[64rem] min-h-7">
@@ -483,13 +485,13 @@ export default function App() {
         )}
       </main>
 
-      <footer className="px-2.5 py-1 border-t border-surface/60 text-[11px] text-muted flex items-center gap-3 leading-snug">
+      <footer className="px-2.5 py-1 border-t border-surface/60 text-[11px] text-fg/70 flex items-center gap-3 leading-snug">
         <span>{repos.length} repos</span>
         {tombstones.length > 0 && (
-          <span className="text-muted/60">{tombstones.length} retired</span>
+          <span className="text-fg/55">{tombstones.length} retired</span>
         )}
-        <span className="hidden sm:inline text-muted/60">read-only</span>
-        <span className="ml-auto opacity-60">ndisc suite</span>
+        <span className="hidden sm:inline text-fg/55">read-only</span>
+        <span className="ml-auto text-fg/55">ndisc suite</span>
       </footer>
     </div>
   );
