@@ -17,7 +17,7 @@ import {
   type Tombstone,
   type Visibility,
 } from "./lib/tauri";
-import { RepoRow } from "./components/RepoRow";
+import { barClip, RepoRow } from "./components/RepoRow";
 
 // Suite rule: the version chip shows only major.minor.patch; any pre-release
 // suffix drops to the tooltip so the chip keeps a fixed width.
@@ -62,6 +62,22 @@ function GroupDot({ sev, hint }: { sev: Severity; hint?: string }) {
       aria-label={label}
       role="img"
     />
+  );
+}
+
+/** One number in a group header's breakdown.
+ *
+ *  Boxed in a faint fill of its own tone, with the number at full strength —
+ *  the form the `config` count always had. Bare numbers at 60–70% alpha were
+ *  hard to find at the far edge of a wide window, and only the alarming count
+ *  had a shape, so the header read as one boxed number and some noise. The
+ *  alert box stays the strongest by its fill, not by being the only box. */
+function Count({ n, tone, title }: { n: number; tone: string; title: string }) {
+  if (n === 0) return null;
+  return (
+    <span className={cn("px-1.5 rounded min-w-[1.5rem] text-center", tone)} title={title}>
+      {n}
+    </span>
   );
 }
 
@@ -352,28 +368,18 @@ export default function App() {
                 {/* A breakdown, not an alarm: a group of ten with one bad
                     remote should not look the same as one that is all bad. */}
                 <span className="ml-auto flex items-center gap-1.5 text-[11px] font-mono tabular-nums">
-                  {c.clean > 0 && <span className="text-ok/70" title={`${c.clean} clean`}>{c.clean}</span>}
-                  {c.dirty > 0 && <span className="text-warn" title={`${c.dirty} with local work`}>{c.dirty}</span>}
-                  {c.unpinned > 0 && (
-                    <span className="text-mauve/80" title={`${c.unpinned} on an unpinned remote`}>{c.unpinned}</span>
-                  )}
-                  {c.archive > 0 && (
-                    <span className="text-muted/60" title={`${c.archive} local-only archive`}>{c.archive}</span>
-                  )}
+                  <Count n={c.clean} tone="bg-ok/15 text-ok" title={`${c.clean} clean`} />
+                  <Count n={c.dirty} tone="bg-warn/15 text-warn" title={`${c.dirty} with local work`} />
+                  <Count n={c.unpinned} tone="bg-mauve/15 text-mauve" title={`${c.unpinned} on an unpinned remote`} />
+                  <Count n={c.archive} tone="bg-muted/15 text-muted" title={`${c.archive} local-only archive`} />
                   {/* `bucket` puts a held repo here and nowhere else, so without
                       this the ngit group — three repos, all declared no-push —
                       showed no count at all, closed or open. The one group that
                       says nothing about itself was the one whose whole point is
                       that its unpushed commits are expected. Counted, never
-                      alarming: mauve like the chip, unboxed like the rest. */}
-                  {c.hold > 0 && (
-                    <span className="text-mauve" title={`${c.hold} declared no-push`}>{c.hold}</span>
-                  )}
-                  {c.config > 0 && (
-                    <span className="px-1.5 rounded bg-alert/25 text-alert font-semibold" title={`${c.config} needing a fix`}>
-                      {c.config}
-                    </span>
-                  )}
+                      alarming: mauve like the chip, boxed like the rest. */}
+                  <Count n={c.hold} tone="bg-mauve/15 text-mauve" title={`${c.hold} declared no-push`} />
+                  <Count n={c.config} tone="bg-alert/25 text-alert font-semibold" title={`${c.config} needing a fix`} />
                 </span>
               </button>
               {isOpen && rows.map((r, i) => (
@@ -381,6 +387,8 @@ export default function App() {
                     key={r.path}
                     r={r}
                     zebra={i % 2 === 1}
+                    first={i === 0}
+                    last={i === rows.length - 1}
                     visibility={visibility}
                     accounts={accounts}
                     fetchedAt={single.get(r.path)}
@@ -426,17 +434,12 @@ export default function App() {
               </span>
               <span className="text-xs uppercase tracking-wider text-muted font-medium">retired</span>
               <span className="ml-auto flex items-center gap-1.5 text-[11px] font-mono tabular-nums">
-                <span className="text-muted/60" title={`${tombstones.length} deleted on purpose`}>
-                  {tombstones.length}
-                </span>
-                {contradicted > 0 && (
-                  <span
-                    className="px-1.5 rounded bg-alert/25 text-alert font-semibold"
-                    title="Recorded as deleted, but found on disk"
-                  >
-                    {contradicted}
-                  </span>
-                )}
+                <Count n={tombstones.length} tone="bg-muted/15 text-muted" title={`${tombstones.length} deleted on purpose`} />
+                <Count
+                  n={contradicted}
+                  tone="bg-alert/25 text-alert font-semibold"
+                  title="Recorded as deleted, but found on disk"
+                />
               </span>
             </button>
             {prefs.retiredOpen &&
@@ -452,7 +455,10 @@ export default function App() {
                   >
                     <div className="grid grid-cols-[6px_minmax(7rem,13rem)_minmax(0,1fr)] md:grid-cols-[6px_minmax(9rem,15rem)_8.5rem_minmax(0,1fr)] items-center gap-x-3 pr-2 max-w-[64rem] min-h-7">
                       {/* Inset like a repo row's bar — see RepoRow. */}
-                      <div className={cn("h-6 w-1.5", here ? "bg-alert" : "bg-muted/25")} />
+                      <div
+                        className={cn("h-6 w-1.5", here ? "bg-alert" : "bg-muted/25")}
+                        style={{ clipPath: barClip(i === 0, i === tombstones.length - 1) }}
+                      />
                       <span className="text-sm text-muted truncate leading-snug">{t.name}</span>
                       <span className="hidden md:block font-mono text-[11px] text-muted/60 tabular-nums leading-snug">
                         {t.removed ?? <span className="text-muted/30">—</span>}

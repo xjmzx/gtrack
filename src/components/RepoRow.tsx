@@ -195,9 +195,29 @@ function VerifiedKey({ a }: { a: Shown<string> }) {
   );
 }
 
+/** The margin bar's ends, cut at 45° where a group starts and stops.
+ *
+ *  Inset bars (below) made every row distinct and, with it, made a group's
+ *  edges indistinct: the first bar of a group looked like any other, and so
+ *  did the last. Cutting the outer corner of the first and last bar brackets
+ *  the group without adding a mark — a lone repo gets both cuts. The cut is
+ *  the bar's own width, which is what makes it 45°. SUITE.md's square-corner
+ *  rule does not bind here: gtrack took the n-suite as a starting reference
+ *  and is not strictly part of it. */
+export function barClip(first: boolean, last: boolean): string | undefined {
+  if (!first && !last) return undefined;
+  const cut = "6px";
+  const top = first ? `0 ${cut}, 100% 0` : "0 0, 100% 0";
+  const bottom = last ? `100% 100%, 0 calc(100% - ${cut})` : "100% 100%, 0 100%";
+  return `polygon(${top}, ${bottom})`;
+}
+
 export interface RowProps {
   r: RepoStatus;
   zebra: boolean;
+  /** First and last row of its group — see `barClip`. */
+  first: boolean;
+  last: boolean;
   visibility: Cache<Visibility>;
   accounts: Cache<string>;
   /** When this row alone was last fetched, this session. */
@@ -209,7 +229,7 @@ export interface RowProps {
   onFetch: (path: string) => void;
 }
 
-export function RepoRow({ r, zebra, visibility, accounts, fetchedAt, busy, locked, onFetch }: RowProps) {
+export function RepoRow({ r, zebra, first, last, visibility, accounts, fetchedAt, busy, locked, onFetch }: RowProps) {
   const sev = severity(r);
   const vis = visibilityMemory.shown(r, visibility);
   const priv = vis?.value === "private" ? vis : null;
@@ -268,6 +288,7 @@ export function RepoRow({ r, zebra, visibility, accounts, fetchedAt, busy, locke
                     ? "bg-mauve/60"
                     : "bg-ok/50",
         )}
+        style={{ clipPath: barClip(first, last) }}
       />
 
       <div className="min-w-0 flex items-baseline gap-1.5">
@@ -277,8 +298,8 @@ export function RepoRow({ r, zebra, visibility, accounts, fetchedAt, busy, locke
         {r.branch && r.branch !== "main" && (
           <span className="text-[11px] font-mono text-digital shrink-0">{r.branch}</span>
         )}
-        {/* Fetch this row alone. Very faint at rest — present enough to be
-            discovered without hovering, quiet enough that fifty-odd rows do
+        {/* Fetch this row alone. Faint at rest — present enough to be
+            discovered without hovering (0.18 was not), quiet enough that fifty-odd rows do
             not read as fifty-odd buttons — full on hover or focus, and held
             full while it spins. While another scan runs it stays at the faint
             level rather than vanishing, so the column does not flicker. */}
@@ -292,7 +313,7 @@ export function RepoRow({ r, zebra, visibility, accounts, fetchedAt, busy, locke
               "ml-auto self-center shrink-0 p-0.5 rounded text-muted hover:text-fg hover:bg-fg/10 transition-opacity disabled:cursor-default",
               busy
                 ? "opacity-100"
-                : "opacity-[0.18] group-hover/row:opacity-100 focus-visible:opacity-100 disabled:!opacity-[0.18]",
+                : "opacity-[0.35] group-hover/row:opacity-100 focus-visible:opacity-100 disabled:!opacity-[0.35]",
             )}
           >
             <RefreshCw size={11} className={busy ? "animate-spin" : ""} />
