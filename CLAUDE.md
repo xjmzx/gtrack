@@ -3,12 +3,20 @@
 Read-only tracker for the git checkouts on this machine: versions, releases and
 repo health. Tauri 2 · React. A development tool, not a music one.
 
-## Read SUITE.md first
+## SUITE.md is a starting reference, not a rulebook
 
 [`../ndisc/SUITE.md`](https://github.com/xjmzx/ndisc/blob/main/SUITE.md) is
-authoritative for shared conventions — the palette, the top-bar grammar, the
-dev/release split. Read it **before making a platform-sensitive choice**; it
-records constraints invisible on the machine you are working on.
+where gtrack's palette, top-bar grammar and dev/release split came from, but
+gtrack is not an n-suite app. The naming says which is which: `n*` apps
+(ndisc, nview, nplay…) follow the suite's design rules strictly; an app that
+starts from an n-suite design and takes another letter — `g` here — may derive
+its own. So a SUITE.md design rule is a default for gtrack, and departing from
+it on purpose is allowed. The margin bar's 45° group ends break the
+square-corner rule, deliberately.
+
+The platform notes are another matter. Still read it **before making a
+platform-sensitive choice**: it records constraints invisible on the machine
+you are working on, and those are facts about the platforms, not design.
 
 ## Build and verify
 
