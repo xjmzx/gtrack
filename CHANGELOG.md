@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.1.14
 
 - **A git that cannot run stops the scan instead of describing it.** Every
   git call was read as *no answer* one at a time, so when git itself could not
@@ -10,6 +10,9 @@
   asked once before any repository is inspected; on failure the scan (and a
   single-row fetch, and the headless example) reports git's own message in
   the error banner instead of producing rows built from failures.
+- **The icon fills 89% of its tile on Linux and Windows**, matching native
+  dock icons there instead of Apple's 80.5% grid, which read small beside
+  them. macOS keeps Apple's grid.
 
 ## v0.1.13
 
