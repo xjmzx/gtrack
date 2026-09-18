@@ -28,6 +28,10 @@ fn main() {
         },
         None => gtrack_lib::config::Config::default(),
     };
+    if let Err(e) = gtrack_lib::scan::check_git() {
+        eprintln!("{e}");
+        std::process::exit(1);
+    }
     let mut rows = gtrack_lib::scan::scan(&cfg, fetch);
     // Group contiguously, or a group's header prints once per run of rows.
     rows.sort_by(|a, b| (&a.group, &a.name).cmp(&(&b.group, &b.name)));

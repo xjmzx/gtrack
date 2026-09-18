@@ -49,9 +49,12 @@ fn save_config(app: AppHandle, cfg: Config) -> Result<(), String> {
 async fn scan_repos(app: AppHandle, fetch: bool) -> Result<Vec<RepoStatus>, String> {
     let cfg = config::load(&config_dir(&app)?)?;
     // Blocking git invocations, off the webview thread.
-    tauri::async_runtime::spawn_blocking(move || scan::scan(&cfg, fetch))
-        .await
-        .map_err(|e| format!("scan failed: {e}"))
+    tauri::async_runtime::spawn_blocking(move || {
+        scan::check_git()?;
+        Ok(scan::scan(&cfg, fetch))
+    })
+    .await
+    .map_err(|e| format!("scan failed: {e}"))?
 }
 
 /// Rescan one repository, fetching it first if asked.
@@ -61,10 +64,13 @@ async fn scan_repos(app: AppHandle, fetch: bool) -> Result<Vec<RepoStatus>, Stri
 async fn scan_repo(app: AppHandle, path: String, fetch: bool) -> Result<RepoStatus, String> {
     let cfg = config::load(&config_dir(&app)?)?;
     let target = PathBuf::from(&path);
-    tauri::async_runtime::spawn_blocking(move || scan::scan_one(&cfg, &target, fetch))
-        .await
-        .map_err(|e| format!("scan failed: {e}"))?
-        .ok_or_else(|| format!("not a repository under the configured roots: {path}"))
+    tauri::async_runtime::spawn_blocking(move || {
+        scan::check_git()?;
+        scan::scan_one(&cfg, &target, fetch)
+            .ok_or_else(|| format!("not a repository under the configured roots: {path}"))
+    })
+    .await
+    .map_err(|e| format!("scan failed: {e}"))?
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

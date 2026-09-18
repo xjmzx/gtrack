@@ -220,6 +220,35 @@ fn extend_path(current: &OsStr, extra: &[PathBuf]) -> Option<OsString> {
     added.then(|| std::env::join_paths(&dirs).ok()).flatten()
 }
 
+/// Whether `git` runs at all on this machine, asked once before a scan.
+///
+/// `git` below reads every failure as *no answer*, which is right for one
+/// repository and badly wrong for all of them. When git itself cannot start,
+/// every question fails the same way: no remote reads as `archive`, no
+/// upstream skips the fetch without an error, no tag reads as `untagged`, and
+/// a failed `status` reads as clean. That happened for real — macOS's
+/// `/usr/bin/git` is a shim that refuses to run until an updated Xcode's
+/// license is accepted again, and 59 of 62 repositories were reported as
+/// archives while fetch did nothing and said nothing. A whole screen of
+/// plausible states is the confident wrong answer this tool exists to avoid,
+/// so a git that cannot answer `--version` stops the scan and says why.
+pub fn check_git() -> Result<(), String> {
+    match git_anywhere().arg("--version").output() {
+        Ok(o) if o.status.success() => Ok(()),
+        Ok(o) => Err(git_unusable(&String::from_utf8_lossy(&o.stderr))),
+        Err(e) => Err(git_unusable(&e.to_string())),
+    }
+}
+
+fn git_unusable(detail: &str) -> String {
+    let detail = detail.trim();
+    if detail.is_empty() {
+        "git is not usable here: `git --version` failed with no output".into()
+    } else {
+        format!("git is not usable here, so nothing was scanned: {detail}")
+    }
+}
+
 fn git(dir: &Path, args: &[&str]) -> Option<String> {
     let out = git_cmd(dir).args(args).output().ok()?;
     if !out.status.success() {
@@ -841,6 +870,16 @@ pub fn scan(cfg: &Config, fetch: bool) -> Vec<RepoStatus> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_unusable_git_says_why() {
+        let shim = "You have not agreed to the Xcode license agreements.\n";
+        let msg = git_unusable(shim);
+        assert!(msg.contains("Xcode license"), "{msg}");
+        assert!(!msg.ends_with('\n'));
+        // Silent failure still produces something to read.
+        assert!(git_unusable("  \n").contains("git --version"));
+    }
 
     #[test]
     fn remote_classification_separates_the_one_that_bites() {

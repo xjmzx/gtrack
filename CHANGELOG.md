@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- **A git that cannot run stops the scan instead of describing it.** Every
+  git call was read as *no answer* one at a time, so when git itself could not
+  start — macOS's `/usr/bin/git` refusing to run until an updated Xcode's
+  license was accepted — every repository came back as an untagged, clean
+  `archive` and fetch did nothing without an error. `git --version` is now
+  asked once before any repository is inspected; on failure the scan (and a
+  single-row fetch, and the headless example) reports git's own message in
+  the error banner instead of producing rows built from failures.
+
 ## v0.1.13
 
 - **A passed account check is shown**, as a small muted-green key beside the
