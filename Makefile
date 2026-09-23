@@ -68,6 +68,11 @@ icons:
 	convert app-icon-linux.png -define icon:auto-resize=256,64,48,32,24,16 src-tauri/icons/icon.ico
 	@echo "  windows icon -> src-tauri/icons/icon.ico"
 	rm -f app-icon-linux.svg app-icon-linux.png
+	@# The webview favicon (index.html: <link rel="icon" href="/icon.svg">) is a
+	@# second copy of the master and drifts silently: the dock icon updates with
+	@# the raster set while the window keeps the old mark. psync shipped exactly
+	@# that in v0.2.10.
+	cp icon.svg public/icon.svg
 
 build: $(TAURI_BIN)
 
