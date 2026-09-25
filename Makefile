@@ -124,6 +124,11 @@ uninstall:
 	@if command -v update-desktop-database >/dev/null 2>&1; then \
 		update-desktop-database $(APPDIR) >/dev/null 2>&1 || true; \
 	fi
+	@# install rebuilt the cache with gtrack.svg in it; left alone, it keeps
+	@# pointing at the deleted file and shadows the .deb's icon in the shell.
+	@if command -v gtk-update-icon-cache >/dev/null 2>&1; then \
+		gtk-update-icon-cache -f -t $(PREFIX)/share/icons/hicolor >/dev/null 2>&1 || true; \
+	fi
 	@echo "uninstalled from $(PREFIX)"
 
 clean:
