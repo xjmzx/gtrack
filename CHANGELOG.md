@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.1.17
 
 - **Archive a repo from its row.** Hover a row and an archive icon sits beside
   the fetch button; the first click arms it (`archive?`), the second adds the
