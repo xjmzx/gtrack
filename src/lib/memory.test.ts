@@ -9,7 +9,7 @@ function repo(over: Partial<RepoStatus> = {}): RepoStatus {
     fetched: false, fetchError: null, visibility: null, account: null,
     versions: { package: null, cargo: null, tauri: null, lock: null, agree: true },
     latestTag: null, tagDate: null, commitsSinceTag: null, locks: [], unpushedTags: [],
-    authenticatesAs: null, flags: [],
+    authenticatesAs: null, flags: [], declaredArchive: false,
     ...over,
   };
 }

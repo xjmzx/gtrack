@@ -7,8 +7,9 @@
 // sweep, made repeatable.
 //
 // The whole app is a reader. No command mutates a working tree, and the only
-// one with any side effect at all is an explicit fetch, which touches
-// remote-tracking refs and nothing else.
+// one with any side effect on a repository is an explicit fetch, which touches
+// remote-tracking refs and nothing else. The one file the window writes is
+// gtrack's own config, and only its `archived` list (`set_archived`).
 
 pub mod account;
 pub mod config;
@@ -16,10 +17,11 @@ pub mod scan;
 
 use std::path::PathBuf;
 
+use serde::Serialize;
 use tauri::{AppHandle, Manager};
 
 use config::Config;
-use scan::RepoStatus;
+use scan::{RemoteKind, RepoStatus};
 
 fn config_dir(app: &AppHandle) -> Result<PathBuf, String> {
     app.path()
@@ -73,11 +75,49 @@ async fn scan_repo(app: AppHandle, path: String, fetch: bool) -> Result<RepoStat
     .map_err(|e| format!("scan failed: {e}"))?
 }
 
+/// What the archive toggle changed on a row: its declaration and the one flag
+/// slot that depends on it.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ArchiveSlot {
+    declared_archive: bool,
+    flag: Option<String>,
+}
+
+/// Declare a repository archived in `gtrack.json`, or take it back.
+///
+/// Writes gtrack's own config, never the repository. The path is checked
+/// against the configured roots the same way `scan_repo` checks it, and the
+/// local reading (remote, upstream — no fetch) is what the returned flag is
+/// worked out from. The window splices that one flag into the row it already
+/// has, so what the last fetch measured is kept.
+#[tauri::command]
+async fn set_archived(app: AppHandle, path: String, archived: bool) -> Result<ArchiveSlot, String> {
+    let dir = config_dir(&app)?;
+    let cfg = config::load(&dir)?;
+    let target = PathBuf::from(&path);
+    tauri::async_runtime::spawn_blocking(move || {
+        scan::check_git()?;
+        let local = scan::scan_one(&cfg, &target, false)
+            .ok_or_else(|| format!("not a repository under the configured roots: {path}"))?;
+        if archived && local.remote_kind == RemoteKind::None {
+            return Err(format!("{} has no remote, so it is already an archive", local.name));
+        }
+        config::set_archived(&dir, &local.name, archived)?;
+        Ok(ArchiveSlot {
+            declared_archive: archived,
+            flag: scan::archive_slot(archived, local.remote_kind, local.upstream.is_some()).map(Into::into),
+        })
+    })
+    .await
+    .map_err(|e| format!("could not update the archive list: {e}"))?
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![load_config, save_config, scan_repos, scan_repo])
+        .invoke_handler(tauri::generate_handler![load_config, save_config, scan_repos, scan_repo, set_archived])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

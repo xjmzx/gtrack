@@ -11,6 +11,8 @@ import {
   matches,
   scanRepo,
   scanRepos,
+  setArchived,
+  withArchiveSlot,
   type Filter,
   type RepoStatus,
   type Severity,
@@ -174,6 +176,18 @@ export default function App() {
         next.delete(path);
         return next;
       });
+    }
+  }, []);
+
+  /** Declare a repo archived or take it back, then splice the one changed
+   *  flag into its row — the rest of the row stays as last measured. */
+  const toggleArchive = useCallback(async (path: string, archived: boolean) => {
+    setError(null);
+    try {
+      const slot = await setArchived(path, archived);
+      setRepos((prev) => prev.map((r) => (r.path === path ? withArchiveSlot(r, slot) : r)));
+    } catch (e) {
+      setError(String(e));
     }
   }, []);
 
@@ -397,6 +411,7 @@ export default function App() {
                     busy={rowBusy.has(r.path)}
                     locked={anyBusy}
                     onFetch={(p) => void runOne(p)}
+                    onArchive={(p, a) => void toggleArchive(p, a)}
                   />
                 ))}
             </section>

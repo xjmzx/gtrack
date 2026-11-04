@@ -67,6 +67,10 @@ side effect anywhere in the app is `git fetch` updating remote-tracking refs,
 and only when asked. That is what makes it safe to point at fifty working trees
 without thinking about it.
 
+The one file the window writes is gtrack's own: the archive toggle on each row
+(hover, then click twice) adds the repo to — or takes it off — the `archived`
+list in `gtrack.json`. The repository itself is never touched.
+
 ## Configuration
 
 `gtrack.json` in the app config directory holds the roots to scan and the group

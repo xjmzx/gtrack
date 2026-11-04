@@ -56,6 +56,9 @@ export interface RepoStatus {
    *  other account on a mismatch if this scan saw its keys. */
   authenticatesAs: string | null;
   flags: string[];
+  /** Named in the config's `archived` list — the only kind of archive the
+   *  window can undo. A repo with no remote is an archive derived from disk. */
+  declaredArchive: boolean;
 }
 
 export interface Group {
@@ -105,6 +108,36 @@ export const saveConfig = (cfg: Config) => invoke<void>("save_config", { cfg });
 export const scanRepos = (fetch: boolean) => invoke<RepoStatus[]>("scan_repos", { fetch });
 /** One repository. Refused by Rust for any path the configured roots do not hold. */
 export const scanRepo = (path: string, fetch: boolean) => invoke<RepoStatus>("scan_repo", { path, fetch });
+
+/** What the archive toggle changed: the declaration, and the flag now in the
+ *  archive slot (`archive`, `no upstream`, or nothing). Worked out in Rust. */
+export interface ArchiveSlot {
+  declaredArchive: boolean;
+  flag: string | null;
+}
+
+/** Declare a repo archived in gtrack.json, or take it back. Writes gtrack's own
+ *  config — only its `archived` list — and never the repository. */
+export const setArchived = (path: string, archived: boolean) =>
+  invoke<ArchiveSlot>("set_archived", { path, archived });
+
+/** The flags that can sit in the archive slot, which Rust places after these. */
+const SLOT_FLAGS = ["archive", "no upstream"];
+const AHEAD_OF_SLOT = ["no push", "stale lock"];
+
+/** A row with its archive slot replaced, everything else kept as measured.
+ *
+ *  The toggle splices one flag rather than rescanning: a rescan without a
+ *  fetch would drop what the last fetch found (an orphan, another account),
+ *  and fetching to answer a toggle would be the implicit fetch this tool
+ *  refuses. The flag itself comes from Rust; this only puts it in place. */
+export function withArchiveSlot(r: RepoStatus, slot: ArchiveSlot): RepoStatus {
+  const rest = r.flags.filter((f) => !SLOT_FLAGS.includes(f));
+  let at = 0;
+  while (at < rest.length && AHEAD_OF_SLOT.includes(rest[at])) at++;
+  const flags = slot.flag ? [...rest.slice(0, at), slot.flag, ...rest.slice(at)] : rest;
+  return { ...r, flags, declaredArchive: slot.declaredArchive };
+}
 
 /** Which of three lenses a repo falls under.
  *
@@ -254,12 +287,17 @@ const SEVERITY_RANK: Record<Severity, number> = {
   hold: 1,
   warn: 2,
   unpinned: 3,
-  archive: 4,
-  ok: 5,
+  ok: 4,
+  // Below `ok`, not above it. An archive is a settled decision, not a finding,
+  // so it must not tint a group: one retired repo among thirty clean ones
+  // turned the whole identity's dot grey, which read as "this group is
+  // archived". Grey now means every row in the group is.
+  archive: 5,
 };
 
 export function groupSeverity(rows: RepoStatus[]): Severity {
-  let worst: Severity = "ok";
+  if (rows.length === 0) return "ok";
+  let worst: Severity = severity(rows[0]);
   for (const r of rows) {
     const s = severity(r);
     if (SEVERITY_RANK[s] < SEVERITY_RANK[worst]) worst = s;

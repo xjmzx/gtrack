@@ -1,4 +1,5 @@
-import { KeyRound, Lock, RefreshCw } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Archive, ArchiveRestore, KeyRound, Lock, RefreshCw } from "lucide-react";
 import { cn } from "../lib/cn";
 import { severity, type RemoteKind, type RepoStatus } from "../lib/tauri";
 import { accountMemory, visibilityMemory, type Cache, type Shown } from "../lib/memory";
@@ -236,9 +237,58 @@ export interface RowProps {
   /** Any scan is running — the whole list, or another row. */
   locked: boolean;
   onFetch: (path: string) => void;
+  /** Declare this repo archived, or take it back — gtrack.json only. */
+  onArchive: (path: string, archived: boolean) => void;
 }
 
-export function RepoRow({ r, zebra, first, last, visibility, accounts, fetchedAt, busy, locked, onFetch }: RowProps) {
+/** The archive toggle: two clicks, the first only arms it.
+ *
+ *  Undoable, but a stray click would still grey a live repo and drop it from
+ *  every count but `archive`, so the first click turns the icon into a word
+ *  saying what the second will do. Leaving the row, or three seconds, disarms
+ *  it. Shown for a declared archive (to undo it) and for any repo with a
+ *  remote; one with no remote is an archive derived from the disk, and the
+ *  list cannot change that. */
+function ArchiveToggle({ r, locked, onArchive }: { r: RepoStatus; locked: boolean; onArchive: RowProps["onArchive"] }) {
+  const [armed, setArmed] = useState(false);
+  useEffect(() => {
+    if (!armed) return;
+    const t = setTimeout(() => setArmed(false), 3000);
+    return () => clearTimeout(t);
+  }, [armed]);
+  if (!r.declaredArchive && r.remoteKind === "none") return null;
+  const undo = r.declaredArchive;
+  const Icon = undo ? ArchiveRestore : Archive;
+  const what = undo ? "unarchive" : "archive";
+  return (
+    <button
+      onClick={() => {
+        if (!armed) return setArmed(true);
+        setArmed(false);
+        onArchive(r.path, !undo);
+      }}
+      onMouseLeave={() => setArmed(false)}
+      onBlur={() => setArmed(false)}
+      disabled={locked}
+      title={
+        undo
+          ? "Take this repo off the archived list in gtrack.json"
+          : "Mark this repo archived in gtrack.json — the repository itself is not touched"
+      }
+      aria-label={armed ? `Confirm: ${what} ${r.name}` : `${what} ${r.name}`}
+      className={cn(
+        "self-center shrink-0 rounded text-muted hover:text-fg hover:bg-fg/10 transition-opacity disabled:cursor-default",
+        armed
+          ? "opacity-100 px-1 text-[10px] font-mono text-fg bg-fg/10"
+          : "p-0.5 opacity-0 group-hover/row:opacity-[0.55] hover:!opacity-100 focus-visible:opacity-100 disabled:!opacity-0",
+      )}
+    >
+      {armed ? `${what}?` : <Icon size={11} />}
+    </button>
+  );
+}
+
+export function RepoRow({ r, zebra, first, last, visibility, accounts, fetchedAt, busy, locked, onFetch, onArchive }: RowProps) {
   const sev = severity(r);
   const vis = visibilityMemory.shown(r, visibility);
   const priv = vis?.value === "private" ? vis : null;
@@ -306,6 +356,8 @@ export function RepoRow({ r, zebra, first, last, visibility, accounts, fetchedAt
             not read as fifty-odd buttons — full on hover or focus, and held
             full while it spins. While another scan runs it stays at the faint
             level rather than vanishing, so the column does not flicker. */}
+        <span className="ml-auto self-center shrink-0 flex items-center gap-0.5">
+        <ArchiveToggle r={r} locked={locked} onArchive={onArchive} />
         {r.upstream && (
           <button
             onClick={() => onFetch(r.path)}
@@ -313,7 +365,7 @@ export function RepoRow({ r, zebra, first, last, visibility, accounts, fetchedAt
             title={fetchedAt ? `Fetch this repo only — last fetched alone at ${fetchedAt.toLocaleTimeString()}` : "Fetch this repo only"}
             aria-label={`Fetch ${r.name} only`}
             className={cn(
-              "ml-auto self-center shrink-0 p-0.5 rounded text-muted hover:text-fg hover:bg-fg/10 transition-opacity disabled:cursor-default",
+              "self-center shrink-0 p-0.5 rounded text-muted hover:text-fg hover:bg-fg/10 transition-opacity disabled:cursor-default",
               busy
                 ? "opacity-100"
                 : "opacity-[0.55] group-hover/row:opacity-100 focus-visible:opacity-100 disabled:!opacity-[0.55]",
@@ -322,6 +374,7 @@ export function RepoRow({ r, zebra, first, last, visibility, accounts, fetchedAt
             <RefreshCw size={11} className={busy ? "animate-spin" : ""} />
           </button>
         )}
+        </span>
       </div>
 
       <div className="font-mono text-xs tabular-nums text-right leading-snug">

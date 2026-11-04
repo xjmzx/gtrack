@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+- **Archive a repo from its row.** Hover a row and an archive icon sits beside
+  the fetch button; the first click arms it (`archive?`), the second adds the
+  repo to the `archived` list in `gtrack.json`. A declared archive shows
+  `unarchive?` the same way. Only that list is written — the JSON is edited in
+  place, so absent fields keep their defaults, unknown keys and key order
+  survive, and a malformed file is refused rather than overwritten. The row
+  updates its one archive flag without a rescan or a fetch. A repo with no
+  remote has no toggle: it is an archive derived from disk.
+- **An archive no longer greys its group.** It ranked above `ok` in the group
+  roll-up, so one archived repo among thirty clean ones turned a whole
+  identity's dot grey. It now ranks below: grey means every repo in the group
+  is archived.
+
 ## v0.1.15
 
 - **The chrome is achromatic.** gtrack is a co-developed tool rather than a

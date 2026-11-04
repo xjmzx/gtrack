@@ -17,6 +17,7 @@ import {
   bucket,
   counts,
   groupSeverity,
+  withArchiveSlot,
   matches,
   severity,
   type Bucket,
@@ -48,6 +49,7 @@ function repo(over: Partial<RepoStatus> = {}): RepoStatus {
     commitsSinceTag: null,
     locks: [],
     unpushedTags: [],
+    declaredArchive: false,
     account: null,
     authenticatesAs: null,
     flags: [],
@@ -163,7 +165,11 @@ describe("groupSeverity", () => {
   });
 
   it("rolls up to the worst present, in rank order", () => {
-    expect(groupSeverity([BY_SEVERITY.ok, BY_SEVERITY.archive])).toBe("archive");
+    // An archive is settled, not a finding: it never tints a group with
+    // anything else in it, and greys only a group that is all archive.
+    expect(groupSeverity([BY_SEVERITY.ok, BY_SEVERITY.archive])).toBe("ok");
+    expect(groupSeverity([BY_SEVERITY.archive, BY_SEVERITY.ok])).toBe("ok");
+    expect(groupSeverity([BY_SEVERITY.archive, BY_SEVERITY.archive])).toBe("archive");
     expect(groupSeverity([BY_SEVERITY.archive, BY_SEVERITY.unpinned])).toBe("unpinned");
     expect(groupSeverity([BY_SEVERITY.unpinned, BY_SEVERITY.warn])).toBe("warn");
     // `hold` outranks the amber: a caution that sorts under routine work gets
@@ -229,5 +235,28 @@ describe("matches", () => {
     expect(matches(BY_SEVERITY.ok, "all")).toBe(true);
     expect(matches(BY_SEVERITY.ok, "clean")).toBe(true);
     expect(matches(BY_SEVERITY.hold, "clean")).toBe(false);
+  });
+});
+
+describe("withArchiveSlot", () => {
+  it("puts the archive flag after no-push and a stale lock, keeping the rest", () => {
+    const r = repo({ flags: ["no push", "stale lock", "orphan", "2 unpushed"] });
+    const got = withArchiveSlot(r, { declaredArchive: true, flag: "archive" });
+    expect(got.flags).toEqual(["no push", "stale lock", "archive", "orphan", "2 unpushed"]);
+    expect(got.declaredArchive).toBe(true);
+  });
+
+  it("undoing it restores what Rust says belongs there, or nothing", () => {
+    const r = repo({ flags: ["archive", "1 behind"], declaredArchive: true });
+    expect(withArchiveSlot(r, { declaredArchive: false, flag: null }).flags).toEqual(["1 behind"]);
+    expect(withArchiveSlot(r, { declaredArchive: false, flag: "no upstream" }).flags).toEqual([
+      "no upstream",
+      "1 behind",
+    ]);
+  });
+
+  it("replaces a no-upstream flag rather than adding beside it", () => {
+    const r = repo({ flags: ["no upstream"] });
+    expect(withArchiveSlot(r, { declaredArchive: true, flag: "archive" }).flags).toEqual(["archive"]);
   });
 });

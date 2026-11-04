@@ -123,6 +123,9 @@ pub struct RepoStatus {
     /// on a mismatch the other account if this scan saw its keys.
     pub authenticates_as: Option<String>,
     pub flags: Vec<String>,
+    /// Named in the config's `archived` list — the only kind of archive the
+    /// window can undo. One with no remote is derived from the disk instead.
+    pub declared_archive: bool,
 }
 
 /// A `git -C <dir>` invocation, ready for its arguments.
@@ -545,6 +548,21 @@ fn discover(cfg: &Config) -> Vec<(PathBuf, String)> {
 /// exists** is the alarming case — work with somewhere to go and no route to
 /// it. Colouring the first red made a considered decision look like rot, and
 /// buried the second among it.
+/// The flag in the archive slot: a declared archive, or else `rootedness`.
+///
+/// A declared retirement outranks the derived reading: the repo still has a
+/// remote and a route out, so nothing on disk would ever reveal it. Shared by
+/// the scan and by the archive toggle, which recomputes this one slot rather
+/// than rescanning — a rescan without a fetch would throw away what the last
+/// fetch measured, and fetching to answer a toggle would be an implicit fetch.
+pub fn archive_slot(declared: bool, remote_kind: RemoteKind, has_upstream: bool) -> Option<&'static str> {
+    if declared {
+        Some("archive")
+    } else {
+        rootedness(remote_kind, has_upstream)
+    }
+}
+
 fn rootedness(remote_kind: RemoteKind, has_upstream: bool) -> Option<&'static str> {
     match (remote_kind, has_upstream) {
         (RemoteKind::None, _) => Some("archive"),
@@ -769,11 +787,8 @@ fn inspect(path: &Path, root_label: &str, cfg: &Config, fetch: bool, keys: &KeyB
     if !locks.is_empty() {
         flags.push("stale lock".into());
     }
-    // A declared retirement outranks the derived reading: the repo still has a
-    // remote and a route out, so nothing on disk would ever reveal it.
-    if cfg.is_archived(&name) {
-        flags.push("archive".into());
-    } else if let Some(f) = rootedness(remote_kind, upstream.is_some()) {
+    let declared_archive = cfg.is_archived(&name);
+    if let Some(f) = archive_slot(declared_archive, remote_kind, upstream.is_some()) {
         flags.push(f.into());
     }
     for f in remote_flags(fetched, fetch_error.as_deref(), remote_kind, account.as_ref().map(|(m, _)| m)) {
@@ -820,6 +835,7 @@ fn inspect(path: &Path, root_label: &str, cfg: &Config, fetch: bool, keys: &KeyB
             _ => None,
         },
         flags,
+        declared_archive,
     }
 }
 
@@ -937,6 +953,16 @@ mod tests {
         assert!(pins_account(RemoteKind::SshAlias));
         // No remote at all: already reported as `archive`, nothing to pin.
         assert!(pins_account(RemoteKind::None));
+    }
+
+    #[test]
+    fn a_declared_archive_takes_the_slot_and_undoing_it_restores_rootedness() {
+        assert_eq!(archive_slot(true, RemoteKind::SshAlias, true), Some("archive"));
+        assert_eq!(archive_slot(true, RemoteKind::SshAlias, false), Some("archive"));
+        assert_eq!(archive_slot(false, RemoteKind::SshAlias, true), None);
+        assert_eq!(archive_slot(false, RemoteKind::SshAlias, false), Some("no upstream"));
+        // No remote stays an archive whatever the list says.
+        assert_eq!(archive_slot(false, RemoteKind::None, false), Some("archive"));
     }
 
     #[test]
@@ -1131,10 +1157,10 @@ mod tests {
             versions: Versions::default(),
             latest_tag: Some("v1".into()), tag_date: None, commits_since_tag: None,
             locks: vec![], unpushed_tags: vec!["v1".into()], authenticates_as: Some("adjmx".into()),
-            flags: vec![],
+            flags: vec![], declared_archive: true,
         };
         let j = serde_json::to_value(&r).unwrap();
-        for key in ["latestTag", "tagDate", "commitsSinceTag", "remoteKind", "fetchError", "unpushedTags", "authenticatesAs"] {
+        for key in ["latestTag", "tagDate", "commitsSinceTag", "remoteKind", "fetchError", "unpushedTags", "authenticatesAs", "declaredArchive"] {
             assert!(j.get(key).is_some(), "missing camelCase key `{key}` — the webview would read undefined");
         }
         assert!(j.get("latest_tag").is_none(), "snake_case key leaked through");

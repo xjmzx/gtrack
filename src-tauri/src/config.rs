@@ -338,9 +338,119 @@ pub fn save(dir: &Path, cfg: &Config) -> Result<(), String> {
     fs::write(&path, body).map_err(|e| format!("could not write {}: {e}", path.display()))
 }
 
+/// Declare a repository archived, or take the declaration back.
+///
+/// The one write the window makes, and it touches only the `archived` list.
+/// The file is edited as JSON rather than rewritten from `Config`, for two
+/// reasons. A field the file leaves out falls back to its own default, and a
+/// machine following the convention has no file at all — serialising the
+/// whole struct would freeze today's defaults into it and quietly end that.
+/// And the file is hand-edited: a key this version does not know about must
+/// survive a toggle, and the keys keep their order (`preserve_order`).
+///
+/// A malformed file is refused, never repaired: the person editing it is
+/// mid-thought, and a toggle that "fixed" it would destroy their edit. The
+/// write goes to a temporary file first and is renamed over the original, so
+/// a crash cannot leave half a config behind.
+pub fn set_archived(dir: &Path, repo_name: &str, archived: bool) -> Result<(), String> {
+    if repo_name.is_empty() || repo_name.contains(['/', '\\']) {
+        return Err(format!("not a repository name: {repo_name:?}"));
+    }
+    let path = config_path(dir);
+    let mut doc: serde_json::Value = if path.exists() {
+        let raw = fs::read_to_string(&path).map_err(|e| format!("could not read {}: {e}", path.display()))?;
+        serde_json::from_str(&raw).map_err(|e| format!("{} is malformed: {e}", path.display()))?
+    } else {
+        serde_json::Value::Object(Default::default())
+    };
+    let obj = doc
+        .as_object_mut()
+        .ok_or_else(|| format!("{} is not a JSON object", path.display()))?;
+    let list = obj
+        .entry("archived")
+        .or_insert_with(|| serde_json::Value::Array(Vec::new()))
+        .as_array_mut()
+        .ok_or_else(|| format!("`archived` in {} is not a list", path.display()))?;
+    let present = list.iter().any(|v| v.as_str() == Some(repo_name));
+    if archived == present {
+        return Ok(());
+    }
+    if archived {
+        list.push(serde_json::Value::String(repo_name.into()));
+    } else {
+        list.retain(|v| v.as_str() != Some(repo_name));
+    }
+    // Still has to parse as a config afterwards, or the next load fails and
+    // the window comes up empty.
+    serde_json::from_value::<Config>(doc.clone()).map_err(|e| format!("refusing to write an unreadable config: {e}"))?;
+
+    fs::create_dir_all(dir).map_err(|e| format!("could not create {}: {e}", dir.display()))?;
+    let body = serde_json::to_string_pretty(&doc).map_err(|e| format!("could not serialise: {e}"))? + "\n";
+    let tmp = path.with_extension("json.tmp");
+    fs::write(&tmp, body).map_err(|e| format!("could not write {}: {e}", tmp.display()))?;
+    fs::rename(&tmp, &path).map_err(|e| format!("could not replace {}: {e}", path.display()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn scratch(tag: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("gtrack-test-{tag}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&d);
+        fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    #[test]
+    fn archiving_with_no_file_writes_only_the_list() {
+        // The defaults must stay defaults: no roots or groups frozen in.
+        let d = scratch("nofile");
+        set_archived(&d, "pong", true).unwrap();
+        let raw = fs::read_to_string(config_path(&d)).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(v, serde_json::json!({ "archived": ["pong"] }));
+        assert!(load(&d).unwrap().is_archived("pong"));
+        assert_eq!(load(&d).unwrap().roots.len(), Config::default().roots.len());
+    }
+
+    #[test]
+    fn archiving_keeps_other_keys_and_their_order() {
+        let d = scratch("keep");
+        let before = r#"{"roots":["~/x"],"zzz_unknown":1,"archived":["LRNS"],"groups":[]}"#;
+        fs::write(config_path(&d), before).unwrap();
+        set_archived(&d, "pong", true).unwrap();
+        let raw = fs::read_to_string(config_path(&d)).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        let keys: Vec<_> = v.as_object().unwrap().keys().cloned().collect();
+        assert_eq!(keys, ["roots", "zzz_unknown", "archived", "groups"]);
+        assert_eq!(v["archived"], serde_json::json!(["LRNS", "pong"]));
+    }
+
+    #[test]
+    fn unarchiving_removes_only_that_name_and_repeats_are_harmless() {
+        let d = scratch("undo");
+        fs::write(config_path(&d), r#"{"archived":["LRNS","pong"]}"#).unwrap();
+        set_archived(&d, "pong", false).unwrap();
+        set_archived(&d, "pong", false).unwrap();
+        set_archived(&d, "LRNS", true).unwrap();
+        assert_eq!(load(&d).unwrap().archived, ["LRNS"]);
+    }
+
+    #[test]
+    fn a_malformed_file_is_refused_not_repaired() {
+        let d = scratch("bad");
+        fs::write(config_path(&d), r#"{"archived": ["#).unwrap();
+        assert!(set_archived(&d, "pong", true).is_err());
+        assert_eq!(fs::read_to_string(config_path(&d)).unwrap(), r#"{"archived": ["#);
+    }
+
+    #[test]
+    fn a_path_is_not_a_repository_name() {
+        let d = scratch("path");
+        assert!(set_archived(&d, "../etc", true).is_err());
+        assert!(set_archived(&d, "", true).is_err());
+    }
 
     #[test]
     fn debug_builds_use_a_separate_config_file() {

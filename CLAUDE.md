@@ -48,6 +48,15 @@ explicitly requested. This is what makes it safe to point at fifty working
 trees, and it is not negotiable — a tool that might modify a repo is a tool you
 hesitate to run, which defeats the point of it.
 
+The one file the window does write is gtrack's own config, and only its
+`archived` list (the per-row archive toggle, `set_archived`). That is not a
+repository, and the write is kept narrow on purpose: it edits the JSON in place
+rather than serialising `Config`, so absent fields keep falling back to their
+defaults, unknown keys survive and the key order holds; a malformed file is
+refused rather than repaired; and the row splices the one changed flag instead
+of rescanning, since a rescan without a fetch would drop what the last fetch
+found and fetching to answer a toggle would be an implicit fetch.
+
 ## Traps specific to this repo
 
 - **Never fetch implicitly.** Ahead/behind computed against un-fetched refs
@@ -152,9 +161,10 @@ hesitate to run, which defeats the point of it.
   arrives late. The only signal that one should go is the on-disk
   contradiction, and gtrack shows it rather than resolving it — only the person
   who wrote the note knows whether the tree was re-cloned or the note was
-  written early. Removal is a hand-edit, consistent with roots, groups and
-  `archived`, none of which have an editing UI either. `save_config` exists on
-  the Rust side but is called from nowhere.
+  written early. Removal is a hand-edit, consistent with roots and groups,
+  which have no editing UI either. `archived` is the exception: the row toggle
+  writes it (see the one rule). `save_config` exists on the Rust side but is
+  called from nowhere — the toggle deliberately does not use it.
 - **Do not add a "delete this repo" action.** It is the most natural feature
   request the `orphan` flag will produce and the clearest possible violation of
   the one rule above. Emitting a path to act on elsewhere is fine; executing
