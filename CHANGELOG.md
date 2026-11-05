@@ -1,6 +1,19 @@
 # Changelog
 
-## v0.1.17
+## Unreleased
+
+- **An upstream tab, for projects you follow rather than develop.** The
+  header's new `mine | upstream` switch opens a second list read from
+  `upstream.roots` in `gtrack.json` (default `~/code`), grouped by category
+  folder. Each clone is expected to match its upstream exactly, so a row shows
+  `in sync`, `N behind`, `diverged`, `N edited` / `N untracked`, `detached`
+  for a checkout pinned to a tag, and `inactive` when the upstream has had no
+  commits for `upstream.inactive_days` (365). Edits ignore permission-only
+  changes, so trees copied between drives do not read as edited. The newest
+  upstream commit date sits in its own column. Same rules as the main tab:
+  read-only, with fetch on request only and its own fetch button. The tab is
+  scanned the first time it is opened, not on launch. The headless scanner
+  takes `--upstream`.
 
 - **Archive a repo from its row.** Hover a row and an archive icon sits beside
   the fetch button; the first click arms it (`archive?`), the second adds the

@@ -14,6 +14,7 @@
 pub mod account;
 pub mod config;
 pub mod scan;
+pub mod upstream;
 
 use std::path::PathBuf;
 
@@ -22,6 +23,7 @@ use tauri::{AppHandle, Manager};
 
 use config::Config;
 use scan::{RemoteKind, RepoStatus};
+use upstream::UpstreamStatus;
 
 fn config_dir(app: &AppHandle) -> Result<PathBuf, String> {
     app.path()
@@ -75,6 +77,35 @@ async fn scan_repo(app: AppHandle, path: String, fetch: bool) -> Result<RepoStat
     .map_err(|e| format!("scan failed: {e}"))?
 }
 
+/// Scan the upstream tab's clones — other people's projects, kept to follow.
+/// The same contract as `scan_repos`: read-only, and `fetch` is the only side
+/// effect, on the tracked remote and only when asked.
+#[tauri::command]
+async fn scan_upstream(app: AppHandle, fetch: bool) -> Result<Vec<UpstreamStatus>, String> {
+    let cfg = config::load(&config_dir(&app)?)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        scan::check_git()?;
+        Ok(upstream::scan(&cfg, fetch))
+    })
+    .await
+    .map_err(|e| format!("scan failed: {e}"))?
+}
+
+/// Rescan one upstream clone. Refused for any path the upstream roots do not
+/// hold, for the reason `scan_repo` refuses one.
+#[tauri::command]
+async fn scan_upstream_repo(app: AppHandle, path: String, fetch: bool) -> Result<UpstreamStatus, String> {
+    let cfg = config::load(&config_dir(&app)?)?;
+    let target = PathBuf::from(&path);
+    tauri::async_runtime::spawn_blocking(move || {
+        scan::check_git()?;
+        upstream::scan_one(&cfg, &target, fetch)
+            .ok_or_else(|| format!("not a clone under the upstream roots: {path}"))
+    })
+    .await
+    .map_err(|e| format!("scan failed: {e}"))?
+}
+
 /// What the archive toggle changed on a row: its declaration and the one flag
 /// slot that depends on it.
 #[derive(Serialize)]
@@ -117,7 +148,15 @@ async fn set_archived(app: AppHandle, path: String, archived: bool) -> Result<Ar
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![load_config, save_config, scan_repos, scan_repo, set_archived])
+        .invoke_handler(tauri::generate_handler![
+            load_config,
+            save_config,
+            scan_repos,
+            scan_repo,
+            scan_upstream,
+            scan_upstream_repo,
+            set_archived
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

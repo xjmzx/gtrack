@@ -4,6 +4,7 @@
 //!
 //!   cargo run --release --example scan            # local refs only
 //!   cargo run --release --example scan -- --fetch # fetch tracked remotes first
+//!   cargo run --release --example scan -- --upstream [--fetch]  # the upstream tab
 //!
 //! Use `--release`. Without it this is a debug build, and the dev/release
 //! split means a debug build reads `gtrack.dev.json` while the installed app
@@ -31,6 +32,10 @@ fn main() {
     if let Err(e) = gtrack_lib::scan::check_git() {
         eprintln!("{e}");
         std::process::exit(1);
+    }
+    if std::env::args().any(|a| a == "--upstream") {
+        upstream(&cfg, fetch);
+        return;
     }
     let mut rows = gtrack_lib::scan::scan(&cfg, fetch);
     // Group contiguously, or a group's header prints once per run of rows.
@@ -90,4 +95,32 @@ fn main() {
             );
         }
     }
+}
+
+/// The upstream tab, as text: one line per tracked clone, grouped by category.
+fn upstream(cfg: &gtrack_lib::config::Config, fetch: bool) {
+    let rows = gtrack_lib::upstream::scan(cfg, fetch);
+    let mut group = String::new();
+    for r in &rows {
+        if r.group != group {
+            group = r.group.clone();
+            println!("\n== {group}");
+        }
+        let at = r.branch.clone().or_else(|| r.detached_at.clone()).unwrap_or_else(|| "—".into());
+        let last = r.upstream_date.clone().unwrap_or_else(|| "—".into());
+        println!(
+            "  {:<40} {:<14} {:<11} {}",
+            r.name, at, last,
+            if r.flags.is_empty() { "in sync".to_string() } else { r.flags.join(", ") }
+        );
+    }
+    // Inactive and detached are states; everything else is something to do.
+    let states = ["inactive", "detached"];
+    let findings = rows.iter().filter(|r| r.flags.iter().any(|f| !states.contains(&f.as_str()))).count();
+    let inactive = rows.iter().filter(|r| r.flags.iter().any(|f| f == "inactive")).count();
+    println!(
+        "\n{} clones, {findings} not in sync, {inactive} inactive — {}",
+        rows.len(),
+        if fetch { "fetched just now" } else { "local refs only, behind may be stale" }
+    );
 }

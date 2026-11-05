@@ -199,6 +199,31 @@ its own default independently. What remains is that a decision still has to be
 replicated per box, which is the residual cost of keeping both kinds in one
 file.
 
+## The upstream tab is a different question, not a second copy
+
+`upstream` in `gtrack.json` (default root `~/code`, `inactive_days` 365) lists
+other people's projects, cloned to follow and not to work on. Code in
+`src-tauri/src/upstream.rs` and `src/components/UpstreamView.tsx`, deliberately
+apart from `scan.rs` and `lib/tauri.ts`:
+
+- **Each clone is expected to match its upstream exactly.** The flags say how
+  it differs from that: `N behind` (a fast-forward away), `diverged` /
+  `N local` (no fast-forward, usually an upstream force-push), `N edited` /
+  `N untracked`, plus the states `detached` and `inactive`. None of the main
+  tab's identity checks apply. `unpinned`, the account check and the
+  visibility probe are about pushing, and nothing is pushed from here.
+- **Permission bits are ignored when counting edits** (`-c core.fileMode=false`
+  on that one `status` call, never written to the repo's config). Trees copied
+  between drives come back with every mode changed and no content changed.
+  Counting those would mark nearly every clone as edited.
+- **Discovery is `root/category/clone`**, plus `root/clone` and
+  `root/category/sub/clone` (shown as `sub/clone`). Never deeper, and never
+  inside a repository.
+- **Activity is read off the upstream ref, not HEAD.** A clone 900 commits
+  behind has an old HEAD and a very live project.
+- **It still never writes.** The tab shows what is behind. It does not
+  fast-forward, and no command should be added that does.
+
 ## Planned
 
 [`BACKLOG.md`](BACKLOG.md) holds the open design question: a CI-status or

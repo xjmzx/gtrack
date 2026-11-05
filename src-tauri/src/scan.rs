@@ -138,7 +138,7 @@ pub struct RepoStatus {
 ///
 /// It also carries the `PATH` from `child_path` below, which is what lets the
 /// windowed app reach the remote helpers a terminal can already see.
-fn git_cmd(dir: &Path) -> Command {
+pub(crate) fn git_cmd(dir: &Path) -> Command {
     let mut cmd = git_anywhere();
     cmd.arg("-C").arg(dir);
     cmd
@@ -252,7 +252,7 @@ fn git_unusable(detail: &str) -> String {
     }
 }
 
-fn git(dir: &Path, args: &[&str]) -> Option<String> {
+pub(crate) fn git(dir: &Path, args: &[&str]) -> Option<String> {
     let out = git_cmd(dir).args(args).output().ok()?;
     if !out.status.success() {
         return None;
@@ -296,7 +296,7 @@ fn pins_account(kind: RemoteKind) -> bool {
     }
 }
 
-fn classify_remote(url: &str) -> RemoteKind {
+pub(crate) fn classify_remote(url: &str) -> RemoteKind {
     if url.starts_with("https://") || url.starts_with("http://") {
         RemoteKind::Https
     } else if url.starts_with("nostr://") {
@@ -497,7 +497,7 @@ fn read_versions(dir: &Path) -> Versions {
 /// Stale locks under `.git`. Only zero-byte ones are reported: a lock with
 /// content may belong to a live operation, and guessing wrong there would mean
 /// telling someone to delete a file a running git is using.
-fn stale_locks(git_dir: &Path, depth: usize, out: &mut Vec<String>) {
+pub(crate) fn stale_locks(git_dir: &Path, depth: usize, out: &mut Vec<String>) {
     if depth == 0 {
         return;
     }
@@ -603,7 +603,7 @@ fn rootedness(remote_kind: RemoteKind, has_upstream: bool) -> Option<&'static st
 /// `archive`: kept deliberately, contents living nowhere else. Or delete the
 /// tree and leave a tombstone in `gtrack.json`. It stays red until one of them
 /// happens, because the missing thing is the decision.
-fn fetch_failure(stderr: &str, kind: RemoteKind) -> &'static str {
+pub(crate) fn fetch_failure(stderr: &str, kind: RemoteKind) -> &'static str {
     if pins_account(kind) && says_not_found(stderr) {
         "orphan"
     } else {

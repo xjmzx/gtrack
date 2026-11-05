@@ -138,6 +138,46 @@ pub struct Config {
     /// so nothing in a scan could infer it, so it has to be said.
     #[serde(default)]
     pub no_push: Vec<String>,
+    /// Other people's projects, cloned to follow rather than to work on.
+    ///
+    /// The upstream tab. Kept apart from `roots` on purpose: those are trees
+    /// you push from, and every check on them — pinned accounts, unpushed
+    /// work, version files — asks whether *your* work is safe. A clone kept
+    /// only to track a project asks something else: is it still identical to
+    /// its upstream, and how far behind is it. Mixing the two would bury your
+    /// own repos under rows answering the other question.
+    #[serde(default)]
+    pub upstream: Upstream,
+}
+
+/// Where the tracked clones live, and when one counts as gone quiet.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct Upstream {
+    /// Folders whose subfolders are categories, whose subfolders are clones —
+    /// `~/code/bitcoin/lnd`. A clone directly under a root, or one folder
+    /// deeper inside a category (`~/code/bitcoin/blockstream/Jade`), is found
+    /// too. A root that does not exist is skipped silently, as with `roots`.
+    #[serde(default = "default_upstream_roots")]
+    pub roots: Vec<String>,
+    /// Days since the upstream's newest commit after which a project reads as
+    /// inactive. A state, not a fault: a finished project is not broken.
+    #[serde(default = "default_inactive_days")]
+    pub inactive_days: u32,
+}
+
+fn default_upstream_roots() -> Vec<String> {
+    // The same relative path on every machine, as with `default_roots`.
+    vec!["~/code".into()]
+}
+
+fn default_inactive_days() -> u32 {
+    365
+}
+
+impl Default for Upstream {
+    fn default() -> Self {
+        Self { roots: default_upstream_roots(), inactive_days: default_inactive_days() }
+    }
 }
 
 fn default_roots() -> Vec<Root> {
@@ -233,6 +273,7 @@ impl Default for Config {
             // not be pushed has not made the decision, and guessing one would
             // be inventing an intent.
             no_push: Vec::new(),
+            upstream: Upstream::default(),
         }
     }
 }
@@ -549,6 +590,18 @@ mod tests {
         let c: Config = serde_json::from_str(r#"{"roots":[],"groups":[]}"#).unwrap();
         assert!(c.archived.is_empty());
         assert!(c.retired.is_empty());
+    }
+
+    #[test]
+    fn the_upstream_section_defaults_field_by_field() {
+        // Absent entirely: every config written before the upstream tab.
+        let c: Config = serde_json::from_str(r#"{"roots":[],"groups":[]}"#).unwrap();
+        assert_eq!(c.upstream.roots, ["~/code"]);
+        assert_eq!(c.upstream.inactive_days, 365);
+        // Present but partial: the missing field keeps its own default.
+        let c: Config = serde_json::from_str(r#"{"upstream":{"inactive_days":90}}"#).unwrap();
+        assert_eq!(c.upstream.roots, ["~/code"]);
+        assert_eq!(c.upstream.inactive_days, 90);
     }
 
     #[test]

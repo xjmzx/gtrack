@@ -20,6 +20,7 @@ import {
   type Visibility,
 } from "./lib/tauri";
 import { barClip, RepoRow } from "./components/RepoRow";
+import { UpstreamView } from "./components/UpstreamView";
 
 // Suite rule: the version chip shows only major.minor.patch; any pre-release
 // suffix drops to the tooltip so the chip keeps a fixed width.
@@ -92,6 +93,7 @@ export default function App() {
   const [wasFetched, setWasFetched] = useState(false);
   const [filter, setFilter] = useState<Filter>("all");
   const [prefs, setPrefs] = useState<Prefs>(loadPrefs);
+  const tab = prefs.tab;
   const [retired, setRetired] = useState<Tombstone[]>([]);
   const [visibility, setVisibility] = useState<Cache<Visibility>>(visibilityMemory.load);
   const [accounts, setAccounts] = useState<Cache<string>>(accountMemory.load);
@@ -250,24 +252,56 @@ export default function App() {
   const toggleAll = () =>
     update((p) => ({ ...p, collapsed: allCollapsed ? [] : grouped.map(([l]) => l) }));
 
-  return (
-    <div className="min-h-full flex flex-col">
-      <header className="flex items-center gap-2 px-2.5 py-1.5 border-b border-surface/60">
-        {/* Two-tone in grey: the wordmark keeps its g / track split, but
-            mauve means a state in the rows below and cannot also be a logo. */}
-        <GitBranch size={16} className="text-fg shrink-0" />
-        <span className="text-base font-bold tracking-tight select-none">
-          <span className="text-fg">g</span>
-          <span className="text-muted">track</span>
+  // The wordmark and the tab switch, shared by both tabs' headers so the
+  // switch sits in the same place whichever is showing.
+  const brand = (
+    <>
+      {/* Two-tone in grey: the wordmark keeps its g / track split, but
+          mauve means a state in the rows below and cannot also be a logo. */}
+      <GitBranch size={16} className="text-fg shrink-0" />
+      <span className="text-base font-bold tracking-tight select-none">
+        <span className="text-fg">g</span>
+        <span className="text-muted">track</span>
+      </span>
+      {appVersion && (
+        <span
+          className="hidden lg:inline-flex items-center px-1.5 py-0.5 rounded bg-surfaceHover text-fg/80 font-mono text-[10px] shrink-0"
+          title={`v${appVersion}`}
+        >
+          v{shortVersion(appVersion)}
         </span>
-        {appVersion && (
-          <span
-            className="hidden lg:inline-flex items-center px-1.5 py-0.5 rounded bg-surfaceHover text-fg/80 font-mono text-[10px] shrink-0"
-            title={`v${appVersion}`}
+      )}
+      <div className="ml-1 flex items-center rounded overflow-hidden border border-surfaceHover shrink-0">
+        {(
+          [
+            ["mine", "Your own repos — the trees you push from"],
+            ["upstream", "Other people's projects, cloned to follow — each expected to match its upstream exactly"],
+          ] as const
+        ).map(([key, hint]) => (
+          <button
+            key={key}
+            onClick={() => update((p) => ({ ...p, tab: key }))}
+            title={hint}
+            className={cn(
+              "px-2 py-1 text-xs font-mono transition-colors",
+              tab === key ? "bg-surfaceHover text-fg" : "text-fg/70 hover:text-fg hover:bg-fg/5",
+            )}
           >
-            v{shortVersion(appVersion)}
-          </span>
-        )}
+            {key}
+          </button>
+        ))}
+      </div>
+    </>
+  );
+
+  return (
+    <>
+    <UpstreamView active={tab === "upstream"} brand={brand} prefs={prefs} update={update} />
+    {/* Hidden rather than unmounted, so switching tabs keeps what the last
+        fetch on each one found. */}
+    <div className={cn("min-h-full flex flex-col", tab !== "mine" && "hidden")}>
+      <header className="flex items-center gap-2 px-2.5 py-1.5 border-b border-surface/60">
+        {brand}
 
         <div className="ml-auto flex items-center gap-1">
           {/* Icon-only: the label cost more width than it earned next to the
@@ -509,5 +543,6 @@ export default function App() {
         <span className="ml-auto text-fg/55">ndisc suite</span>
       </footer>
     </div>
+    </>
   );
 }
