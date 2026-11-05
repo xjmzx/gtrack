@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.1.18
 
 - **A new icon.** The 2026-11-04 export: a red tile, with the second branch
   set dark against it. Every platform's set is regenerated from the one
