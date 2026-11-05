@@ -540,7 +540,6 @@ export default function App() {
           <span className="text-fg/55">{tombstones.length} retired</span>
         )}
         <span className="hidden sm:inline text-fg/55">read-only</span>
-        <span className="ml-auto text-fg/55">ndisc suite</span>
       </footer>
     </div>
     </>

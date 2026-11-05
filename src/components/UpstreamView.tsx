@@ -436,7 +436,6 @@ export function UpstreamView({ active, brand, prefs, update }: UpstreamViewProps
       <footer className="px-2.5 py-1 border-t border-surface/60 text-[11px] text-fg/70 flex items-center gap-3 leading-snug">
         <span>{rows.length} clones</span>
         <span className="hidden sm:inline text-fg/55">read-only · tracked, not developed</span>
-        <span className="ml-auto text-fg/55">ndisc suite</span>
       </footer>
     </div>
   );

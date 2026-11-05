@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **A new icon.** The 2026-11-04 export: a red tile, with the second branch
+  set dark against it. Every platform's set is regenerated from the one
+  master, and the webview favicon is kept in step with it.
+- **The window opens at 1100×720**, up from 760×560. The upstream tab's
+  header and its longer `category/clone` names needed the room. The minimum
+  size is unchanged.
+- **The footer no longer says `ndisc suite`.** gtrack takes the suite as a
+  starting reference and is not part of it.
 - **An upstream tab, for projects you follow rather than develop.** The
   header's new `mine | upstream` switch opens a second list read from
   `upstream.roots` in `gtrack.json` (default `~/code`), grouped by category
@@ -14,6 +22,8 @@
   read-only, with fetch on request only and its own fetch button. The tab is
   scanned the first time it is opened, not on launch. The headless scanner
   takes `--upstream`.
+
+## v0.1.17
 
 - **Archive a repo from its row.** Hover a row and an archive icon sits beside
   the fetch button; the first click arms it (`archive?`), the second adds the
