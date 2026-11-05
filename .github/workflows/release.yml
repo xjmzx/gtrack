@@ -110,7 +110,7 @@ jobs:
     name: Build macOS (arm64)
     # Runs after Linux so the release already exists; this job only appends.
     needs: build-linux-x86_64
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v6
         with:
